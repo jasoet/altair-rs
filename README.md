@@ -4,19 +4,19 @@ Production-ready Rust utility crates with OpenTelemetry instrumentation. Spiritu
 
 ## Status
 
-**Pre-alpha** — design approved, implementation not yet started. No crates published to crates.io yet.
+**v0.1.0** — first public release. APIs are stable within `0.x` (minor = breaking allowed, patch = additive).
 
 See [`docs/specs/2026-05-27-altair-rs-starter-design.md`](docs/specs/2026-05-27-altair-rs-starter-design.md) for the full design.
 See [`docs/porting-tracker.md`](docs/porting-tracker.md) for Go → Rust mapping status.
 
-## Starter Set (v0.1.0 planned)
+## Starter Set — v0.1.0
 
-| Crate | Purpose |
-|---|---|
-| `altair-otel` | One-call OpenTelemetry setup — tracing subscriber + OTLP exporters + Meter handle |
-| `altair-config` | Type-safe TOML config with env overrides and validation |
-| `altair-retry` | Async retry with exponential backoff, auto-traced |
-| `altair-concurrent` | Type-safe parallel execution of named async tasks |
+| Crate | Purpose | crates.io |
+|---|---|---|
+| [`altair-otel`](crates/altair-otel) | One-call OpenTelemetry setup | [![crate](https://img.shields.io/crates/v/altair-otel.svg)](https://crates.io/crates/altair-otel) |
+| [`altair-config`](crates/altair-config) | Type-safe TOML config + env + validation | [![crate](https://img.shields.io/crates/v/altair-config.svg)](https://crates.io/crates/altair-config) |
+| [`altair-retry`](crates/altair-retry) | Async retry with auto-tracing | [![crate](https://img.shields.io/crates/v/altair-retry.svg)](https://crates.io/crates/altair-retry) |
+| [`altair-concurrent`](crates/altair-concurrent) | Type-safe parallel execution | [![crate](https://img.shields.io/crates/v/altair-concurrent.svg)](https://crates.io/crates/altair-concurrent) |
 
 ## Design Pillar
 
