@@ -25,7 +25,8 @@
             cargo-deny
             cargo-nextest
             cargo-release
-            release-plz
+            # release-plz: not installed in devshell — only used by CI via
+            # MarcoIeni/release-plz-action; currently marked broken in nixpkgs.
             go-task
             jq
             curl
