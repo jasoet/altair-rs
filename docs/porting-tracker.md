@@ -20,7 +20,7 @@ Tracks the migration status of every package from [`github.com/jasoet/pkg`](http
 | Go package | Rust crate | Status | Underlying libs | Notes |
 |---|---|---|---|---|
 | `otel` + `logging` | `altair-otel` | 📅 Planned | `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `tracing-opentelemetry`, `tracing-subscriber` | Go's two packages merged — `tracing` is the unifier in Rust |
-| `config` | `altair-config` | 📅 Planned | `figment` (toml feature), `validator`, `serde`, `toml` | Thin wrapper; TOML-only (Rust ecosystem default) |
+| `config` | `altair-config` | 🚧 In Progress | `figment` (toml feature), `validator`, `serde`, `toml` | Thin wrapper; TOML-only (Rust ecosystem default) |
 | `retry` | `altair-retry` | 🚧 In Progress | `backon`, `tracing`, `tokio-util` | OTel via global `tracing` subscriber |
 | `concurrent` | `altair-concurrent` | 🚧 In Progress | `tokio`, `tokio-util`, `tracing` | Most original code in starter set (named keying over `JoinSet`) |
 
