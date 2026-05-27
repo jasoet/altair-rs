@@ -38,5 +38,6 @@ pub use error::{Error, Result};
 pub use globals::{meter, shutdown};
 
 // Re-exports for one-dep ergonomics
+pub use opentelemetry::KeyValue;
 pub use opentelemetry::metrics::{Counter, Histogram, Meter, UpDownCounter};
 pub use tracing::{self, Span, debug, error, info, instrument, span, trace, warn};

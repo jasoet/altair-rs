@@ -6,4 +6,5 @@
 
 pub use crate::{Config, ConfigBuilder, Error, Result, meter, shutdown};
 pub use crate::{Span, debug, error, info, instrument, span, trace, warn};
+pub use opentelemetry::KeyValue;
 pub use opentelemetry::metrics::{Counter, Histogram, Meter, UpDownCounter};
