@@ -14,7 +14,7 @@ See [`docs/porting-tracker.md`](docs/porting-tracker.md) for Go → Rust mapping
 | Crate | Purpose |
 |---|---|
 | `altair-otel` | One-call OpenTelemetry setup — tracing subscriber + OTLP exporters + Meter handle |
-| `altair-config` | Type-safe YAML config with env overrides and validation |
+| `altair-config` | Type-safe TOML config with env overrides and validation |
 | `altair-retry` | Async retry with exponential backoff, auto-traced |
 | `altair-concurrent` | Type-safe parallel execution of named async tasks |
 

@@ -15,6 +15,8 @@
 
 Where the Go library wraps existing best-in-class libraries (viper, validator, GORM, zerolog, Echo, etc.) to provide a consistent surface across packages, `altair-rs` does the same for the Rust ecosystem (figment, validator, backon, tracing, opentelemetry, tokio, etc.). The product is the **cross-crate consistency**, not the underlying functionality.
 
+Note: `altair-config` standardizes on **TOML** as the config format (Rust's native ecosystem choice — Cargo, rustfmt, clippy all use TOML). YAML support is not provided; consumers wanting YAML can layer figment's YAML provider in their own application code.
+
 ## 2. Decisions Locked
 
 | Decision | Choice |
@@ -84,7 +86,7 @@ crates/<name>/
 
 ### 3.3 Design Philosophy — "One Dependency, Everything You Need"
 
-When a user adds `altair-config` to their `Cargo.toml`, they must be able to do everything config-related **without** also adding `figment`, `validator`, or `serde_yaml`. Same for every other crate.
+When a user adds `altair-config` to their `Cargo.toml`, they must be able to do everything config-related **without** also adding `figment`, `validator`, or `toml`. Same for every other crate.
 
 Concrete implications:
 
@@ -152,7 +154,7 @@ altair_otel::shutdown();
 
 ### 4.2 `altair-config`
 
-**Purpose:** Type-safe YAML config loading with env-var overrides and validation. Thin convenience wrapper over `figment` + `validator`.
+**Purpose:** Type-safe TOML config loading with env-var overrides and validation. Thin convenience wrapper over `figment` + `validator`.
 
 **Public API surface:**
 
@@ -166,26 +168,28 @@ struct AppConfig {
     database: DbConfig,
 }
 
-let cfg: AppConfig = altair_config::from_yaml_str(YAML, "APP")?;
-let cfg: AppConfig = altair_config::from_file("config.yaml", "APP")?;
+let cfg: AppConfig = altair_config::from_toml_str(TOML, "APP")?;
+let cfg: AppConfig = altair_config::from_file("config.toml", "APP")?;
 
 // Layered explicit loader for multi-source scenarios
 let cfg: AppConfig = altair_config::Loader::new()
-    .yaml_file("base.yaml")
-    .yaml_file_optional("local.yaml")
+    .toml_file("base.toml")
+    .toml_file_optional("local.toml")
     .env_prefix("APP")
     .build()?;
 ```
 
 **Behavior:**
 
-- YAML deserialization via `serde_yaml`
+- TOML deserialization via figment's bundled `toml` provider
 - Env overrides: `APP_DATABASE_HOST=db.prod` sets `cfg.database.host`
 - Validation runs automatically before returning
 - Validation failures → typed `Error::Validation { field, message }`
 - Env parse failures → `Error::EnvParse { key, source }`
 
-**Key dependencies:** `figment`, `validator`, `serde`, `serde_yaml`.
+**Key dependencies:** `figment` (with `toml` feature), `validator`, `serde`, `toml`.
+
+**Why TOML, not YAML:** TOML is the native Rust ecosystem config format (Cargo, rustfmt, clippy, rust-toolchain.toml). Sticking with the ecosystem default reduces friction; consumers who need YAML can layer figment's YAML provider in their own application code.
 
 **Intentionally NOT included (yet):** hot-reload — deferred to a future `altair-config-watch` separate crate to avoid the `notify` dep tax.
 
