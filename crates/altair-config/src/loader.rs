@@ -111,6 +111,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::result_large_err)]
     fn loader_env_override() {
         figment::Jail::expect_with(|jail| {
             jail.create_file("base.toml", "port = 9000\nhost = \"localhost\"\n")?;

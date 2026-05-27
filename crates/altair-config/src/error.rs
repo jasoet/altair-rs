@@ -11,11 +11,23 @@ pub enum Error {
 
     /// Underlying parse/merge error from `figment`.
     #[error("config parse: {0}")]
-    Parse(#[from] figment::Error),
+    Parse(Box<figment::Error>),
 
     /// Validation failed.
     #[error("config validation failed: {0}")]
-    Validation(#[from] validator::ValidationErrors),
+    Validation(Box<validator::ValidationErrors>),
+}
+
+impl From<figment::Error> for Error {
+    fn from(e: figment::Error) -> Self {
+        Self::Parse(Box::new(e))
+    }
+}
+
+impl From<validator::ValidationErrors> for Error {
+    fn from(e: validator::ValidationErrors) -> Self {
+        Self::Validation(Box::new(e))
+    }
 }
 
 /// Convenience result alias.
