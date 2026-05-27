@@ -1,0 +1,25 @@
+# Rust build artifacts
+/target
+**/target
+
+# Cargo lock — gitignored for libraries (this is a library workspace)
+Cargo.lock
+
+# direnv
+.envrc.local
+/.direnv/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Coverage
+*.profraw
+*.profdata
+/coverage/
+/output/
