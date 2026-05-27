@@ -1,0 +1,31 @@
+[package]
+name = "altair-config"
+description = "Type-safe TOML config loading with env overrides and validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["config", "toml", "figment", "validator", "serde"]
+categories = ["config"]
+
+[dependencies]
+figment = { workspace = true }
+validator = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+pretty_assertions = { workspace = true }
+anyhow = { workspace = true }
+tempfile = { workspace = true }
+figment = { workspace = true, features = ["test"] }
+
+[lints]
+workspace = true
