@@ -201,4 +201,33 @@ mod tests {
         let r = Config::from_env();
         assert!(matches!(r, Err(Error::EnvConfig { .. })));
     }
+
+    #[test]
+    fn builder_all_knobs() {
+        let c = Config::builder()
+            .service_name("full")
+            .service_version("9.9.9")
+            .otlp_endpoint("http://collector:4317")
+            .resource_attribute("zone", "us-east-1")
+            .resource_attribute("tier", "prod")
+            .exporter(Exporter::Stdout)
+            .log_format(LogFormat::Json)
+            .build();
+        assert_eq!(c.service_name, "full");
+        assert_eq!(c.service_version.as_deref(), Some("9.9.9"));
+        assert_eq!(c.otlp_endpoint.as_deref(), Some("http://collector:4317"));
+        assert_eq!(c.resource_attributes.len(), 2);
+        assert_eq!(c.log_format, LogFormat::Json);
+        assert!(matches!(c.exporter, Exporter::Stdout));
+    }
+
+    #[test]
+    fn log_format_default_is_pretty() {
+        assert_eq!(LogFormat::default(), LogFormat::Pretty);
+    }
+
+    #[test]
+    fn exporter_default_is_otlp() {
+        assert!(matches!(Exporter::default(), Exporter::Otlp));
+    }
 }

@@ -93,4 +93,33 @@ mod tests {
             .insert("a", |_| async { Ok::<_, std::io::Error>(2) });
         assert_eq!(m.len(), 1);
     }
+
+    #[test]
+    fn default_is_empty() {
+        let m: TaskMap<u32> = TaskMap::default();
+        assert!(m.is_empty());
+        assert_eq!(m.len(), 0);
+    }
+
+    #[test]
+    fn len_after_three_inserts() {
+        let m: TaskMap<u32> = TaskMap::new()
+            .insert("a", |_| async { Ok::<_, std::io::Error>(1) })
+            .insert("b", |_| async { Ok::<_, std::io::Error>(2) })
+            .insert("c", |_| async { Ok::<_, std::io::Error>(3) });
+        assert_eq!(m.len(), 3);
+        assert!(!m.is_empty());
+    }
+
+    #[tokio::test]
+    async fn task_closure_executes_after_insert() {
+        let m: TaskMap<u32> =
+            TaskMap::new().insert("only", |_| async { Ok::<_, std::io::Error>(99) });
+        assert_eq!(m.len(), 1);
+        // Pull the task out and run it manually to exercise the boxed closure path.
+        let (_name, task_fn) = m.tasks.into_iter().next().unwrap();
+        let ct = tokio_util::sync::CancellationToken::new();
+        let out = task_fn(ct).await.unwrap();
+        assert_eq!(out, 99);
+    }
 }
