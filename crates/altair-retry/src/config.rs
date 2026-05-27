@@ -1,6 +1,7 @@
 //! Retry configuration.
 
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 /// Retry policy.
 #[derive(Debug, Clone)]
@@ -11,6 +12,7 @@ pub struct Config {
     pub(crate) max_interval: Duration,
     pub(crate) multiplier: f64,
     pub(crate) jitter: bool,
+    pub(crate) cancellation_token: Option<CancellationToken>,
 }
 
 impl Config {
@@ -37,6 +39,7 @@ impl Default for Config {
             max_interval: Duration::from_secs(30),
             multiplier: 1.5,
             jitter: true,
+            cancellation_token: None,
         }
     }
 }
@@ -87,6 +90,13 @@ impl ConfigBuilder {
     #[must_use]
     pub fn jitter(mut self, on: bool) -> Self {
         self.inner.jitter = on;
+        self
+    }
+
+    /// Attach a [`CancellationToken`] — when triggered, retry returns [`crate::Error::Cancelled`].
+    #[must_use]
+    pub fn cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.inner.cancellation_token = Some(token);
         self
     }
 

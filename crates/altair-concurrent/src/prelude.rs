@@ -4,4 +4,7 @@
 //! use altair_concurrent::prelude::*;
 //! ```
 
-pub use crate::{CancellationToken, Error, Executor, Result, TaskMap, execute_concurrently};
+pub use crate::{
+    BoxedError, CancellationToken, Error, Executor, PartialExecutor, PartialResults, Result,
+    TaskMap, execute_concurrently,
+};

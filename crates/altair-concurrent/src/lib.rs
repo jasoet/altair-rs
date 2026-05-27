@@ -31,7 +31,7 @@ mod task_map;
 pub mod prelude;
 
 pub use error::{Error, Result};
-pub use executor::{Executor, execute_concurrently};
+pub use executor::{BoxedError, Executor, PartialExecutor, PartialResults, execute_concurrently};
 pub use task_map::TaskMap;
 
 // Re-exports for one-dep ergonomics
