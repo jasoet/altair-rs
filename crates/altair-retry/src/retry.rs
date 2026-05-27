@@ -44,10 +44,7 @@ where
     async {
         loop {
             attempt += 1;
-            let attempt_span = info_span!(
-                "retry.attempt",
-                retry.attempt = attempt,
-            );
+            let attempt_span = info_span!("retry.attempt", retry.attempt = attempt,);
 
             let outcome = op().instrument(attempt_span).await;
 
@@ -104,11 +101,8 @@ where
 
 fn downcast_permanent(e: &BoxedError) -> Option<BoxedError> {
     // PermanentError wraps an underlying error; unwrap so callers see the original
-    if let Some(p) = e.downcast_ref::<PermanentError>() {
-        Some(format!("{p}").into())
-    } else {
-        None
-    }
+    e.downcast_ref::<PermanentError>()
+        .map(|p| format!("{p}").into())
 }
 
 #[cfg(test)]
