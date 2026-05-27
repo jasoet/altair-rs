@@ -8,6 +8,9 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, instrument};
 
+type BoxedError = Box<dyn std::error::Error + Send + Sync>;
+type TaskOutcome<T> = (&'static str, std::result::Result<T, BoxedError>);
+
 /// Configures and runs a [`TaskMap`].
 ///
 /// Construct via [`execute_concurrently`].
@@ -61,11 +64,8 @@ async fn run<T>(executor: Executor<T>) -> Result<HashMap<&'static str, T>>
 where
     T: Send + 'static,
 {
-    let token = executor.cancellation.unwrap_or_else(CancellationToken::new);
-    let mut set: JoinSet<(
-        &'static str,
-        std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>,
-    )> = JoinSet::new();
+    let token = executor.cancellation.unwrap_or_default();
+    let mut set: JoinSet<TaskOutcome<T>> = JoinSet::new();
 
     for (name, task_fn) in executor.tasks.tasks {
         let child_token = token.clone();
@@ -80,21 +80,19 @@ where
     }
 
     let mut results: HashMap<&'static str, T> = HashMap::new();
-    let mut errors: HashMap<&'static str, Box<dyn std::error::Error + Send + Sync>> =
-        HashMap::new();
+    let mut errors: HashMap<&'static str, BoxedError> = HashMap::new();
 
     let timeout = executor.timeout;
 
     loop {
         let next = async { set.join_next().await };
         let outcome = if let Some(d) = timeout {
-            match tokio::time::timeout(d, next).await {
-                Ok(v) => v,
-                Err(_) => {
-                    token.cancel();
-                    set.shutdown().await;
-                    return Err(Error::Timeout);
-                }
+            if let Ok(v) = tokio::time::timeout(d, next).await {
+                v
+            } else {
+                token.cancel();
+                set.shutdown().await;
+                return Err(Error::Timeout);
             }
         } else {
             next.await

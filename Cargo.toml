@@ -52,7 +52,7 @@ tempfile = "3"
 [workspace.lints.rust]
 missing_docs = "deny"
 unsafe_code = "forbid"
-rust_2024_compatibility = "warn"
+rust_2024_compatibility = { level = "warn", priority = -1 }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

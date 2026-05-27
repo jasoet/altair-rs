@@ -31,15 +31,14 @@ async fn cancellation_token_propagates_to_tasks() {
     let token = CancellationToken::new();
     let m: TaskMap<bool> = TaskMap::new().insert("respect_ct", |ct| async move {
         tokio::select! {
-            _ = ct.cancelled() => Ok::<_, std::io::Error>(false),
-            _ = tokio::time::sleep(Duration::from_secs(10)) => Ok::<_, std::io::Error>(true),
+            () = ct.cancelled() => Ok::<_, std::io::Error>(false),
+            () = tokio::time::sleep(Duration::from_secs(10)) => Ok::<_, std::io::Error>(true),
         }
     });
 
     let inner = token.clone();
-    let handle = tokio::spawn(async move {
-        execute_concurrently(m).with_cancellation(inner).await
-    });
+    let handle =
+        tokio::spawn(async move { execute_concurrently(m).with_cancellation(inner).await });
     tokio::time::sleep(Duration::from_millis(20)).await;
     token.cancel();
     let result = handle.await.unwrap();
