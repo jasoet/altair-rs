@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/altair-concurrent"]
+members = ["crates/altair-concurrent", "crates/altair-retry"]
 
 [workspace.package]
 version = "0.1.0"
