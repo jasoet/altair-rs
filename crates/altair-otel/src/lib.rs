@@ -2,7 +2,7 @@
 //!
 //! After calling [`Config::init`], all `tracing::info!`, `tracing::warn!`, and
 //! `#[tracing::instrument]`-decorated functions emit OTLP spans + logs. Use
-//! [`meter`] to obtain an OpenTelemetry [`Meter`](opentelemetry::metrics::Meter)
+//! [`meter`] to obtain an OpenTelemetry [`Meter`]
 //! for explicit metric instrumentation.
 //!
 //! # Example
