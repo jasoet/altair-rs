@@ -1,0 +1,29 @@
+[package]
+name = "altair-retry"
+description = "Async retry with exponential backoff, auto-traced via the tracing crate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["retry", "backoff", "async", "tokio", "tracing"]
+categories = ["asynchronous", "network-programming"]
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+backon = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+pretty_assertions = { workspace = true }
+anyhow = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true

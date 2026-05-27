@@ -2,8 +2,19 @@
 
 Tracks the migration status of every package from [`github.com/jasoet/pkg`](https://github.com/jasoet/pkg) (Go) to its Rust equivalent in `altair-rs`.
 
-**Last updated:** 2026-05-27
+**Last updated:** 2026-05-28
 **Reference Go version:** v2.13.0
+
+## v0.1.0 — Starter set ready for release
+
+All four starter crates implemented, tested, and ready for crates.io publish via `release-plz`:
+- `altair-concurrent` 0.1.0
+- `altair-retry` 0.1.0
+- `altair-config` 0.1.0
+- `altair-otel` 0.1.0
+
+Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
+`altair-server` (axum), `altair-rest` (reqwest), `altair-db` (sqlx).
 
 ## Status Legend
 
@@ -19,10 +30,10 @@ Tracks the migration status of every package from [`github.com/jasoet/pkg`](http
 
 | Go package | Rust crate | Status | Underlying libs | Notes |
 |---|---|---|---|---|
-| `otel` + `logging` | `altair-otel` | 📅 Planned | `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `tracing-opentelemetry`, `tracing-subscriber` | Go's two packages merged — `tracing` is the unifier in Rust |
-| `config` | `altair-config` | 📅 Planned | `figment` (toml feature), `validator`, `serde`, `toml` | Thin wrapper; TOML-only (Rust ecosystem default) |
-| `retry` | `altair-retry` | 📅 Planned | `backon`, `tracing`, `tokio-util` | OTel via global `tracing` subscriber |
-| `concurrent` | `altair-concurrent` | 📅 Planned | `tokio`, `tokio-util`, `tracing` | Most original code in starter set (named keying over `JoinSet`) |
+| `otel` + `logging` | `altair-otel` | 🚧 In Progress | `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `tracing-opentelemetry`, `tracing-subscriber` | Go's two packages merged — `tracing` is the unifier in Rust |
+| `config` | `altair-config` | 🚧 In Progress | `figment` (toml feature), `validator`, `serde`, `toml` | Thin wrapper; TOML-only (Rust ecosystem default) |
+| `retry` | `altair-retry` | 🚧 In Progress | `backon`, `tracing`, `tokio-util` | OTel via global `tracing` subscriber |
+| `concurrent` | `altair-concurrent` | 🚧 In Progress | `tokio`, `tokio-util`, `tracing` | Most original code in starter set (named keying over `JoinSet`) |
 
 ## Awaiting Demand
 

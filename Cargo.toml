@@ -1,0 +1,70 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/altair-concurrent",
+    "crates/altair-retry",
+    "crates/altair-config",
+    "crates/altair-otel",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = ["Jasoet <jasoet87@gmail.com>"]
+repository = "https://github.com/jasoet/altair-rs"
+homepage = "https://github.com/jasoet/altair-rs"
+readme = "README.md"
+keywords = ["utility", "observability", "tokio", "opentelemetry"]
+categories = ["asynchronous", "development-tools"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+futures = "0.3"
+
+# Errors
+thiserror = "2"
+anyhow = "1"
+
+# Tracing / OpenTelemetry
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt", "tracing-log"] }
+tracing-opentelemetry = "0.33"
+opentelemetry = "0.32"
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "trace", "metrics", "logs"] }
+opentelemetry-stdout = { version = "0.32", features = ["trace", "metrics", "logs"] }
+opentelemetry-semantic-conventions = "0.32"
+
+# Config
+figment = { version = "0.10", features = ["toml", "env"] }
+validator = { version = "0.20", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# Retry
+backon = "1"
+
+# Dev/test
+tokio-test = "0.4"
+pretty_assertions = "1.4"
+assert_matches = "1.5"
+tempfile = "3"
+
+[workspace.lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+rust_2024_compatibility = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

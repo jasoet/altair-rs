@@ -1,0 +1,94 @@
+version: '3'
+
+vars:
+  N: nix develop -c
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  fmt:
+    desc: Format all code with rustfmt
+    cmds:
+      - "{{.N}} cargo fmt --all"
+
+  fmt:check:
+    desc: Verify formatting (CI)
+    cmds:
+      - "{{.N}} cargo fmt --all --check"
+
+  lint:
+    desc: Run clippy with strict warnings
+    cmds:
+      - "{{.N}} cargo clippy --workspace --all-targets --all-features -- -D warnings"
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - "{{.N}} cargo test --workspace --lib"
+
+  test:integration:
+    desc: Run integration tests
+    cmds:
+      - "{{.N}} cargo test --workspace --tests"
+
+  test:doc:
+    desc: Run doc tests
+    cmds:
+      - "{{.N}} cargo test --workspace --doc"
+
+  test:examples:
+    desc: Build all examples
+    cmds:
+      - "{{.N}} cargo build --workspace --examples"
+
+  test:complete:
+    desc: Run all tests with coverage
+    cmds:
+      - "{{.N}} cargo llvm-cov --workspace --all-features --html --output-dir output/coverage"
+
+  doc:
+    desc: Build documentation
+    cmds:
+      - "{{.N}} cargo doc --workspace --no-deps"
+
+  check:
+    desc: fmt:check + lint + test
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: test
+
+  ci:check:
+    desc: Full CI check
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: test
+      - task: test:integration
+      - task: test:doc
+      - task: doc
+
+  deny:
+    desc: Run cargo-deny advisories + license check
+    cmds:
+      - "{{.N}} cargo deny check"
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - "{{.N}} cargo clean"
+      - rm -rf output/
+
+  nix:check:
+    desc: Verify Nix environment
+    cmds:
+      - "{{.N}} rustc --version"
+      - "{{.N}} cargo --version"
+      - "{{.N}} task --version"
+
+  release:
+    desc: Run release-plz (CI only)
+    cmds:
+      - "{{.N}} release-plz release"
