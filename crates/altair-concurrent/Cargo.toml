@@ -1,0 +1,28 @@
+[package]
+name = "altair-concurrent"
+description = "Type-safe parallel execution of named async tasks with cancellation and per-task tracing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["async", "concurrent", "tokio", "tracing"]
+categories = ["asynchronous", "concurrency"]
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+pretty_assertions = { workspace = true }
+assert_matches = { workspace = true }
+
+[lints]
+workspace = true
