@@ -2,8 +2,19 @@
 
 Tracks the migration status of every package from [`github.com/jasoet/pkg`](https://github.com/jasoet/pkg) (Go) to its Rust equivalent in `altair-rs`.
 
-**Last updated:** 2026-05-27
+**Last updated:** 2026-05-28
 **Reference Go version:** v2.13.0
+
+## v0.1.0 — Starter set ready for release
+
+All four starter crates implemented, tested, and ready for crates.io publish via `release-plz`:
+- `altair-concurrent` 0.1.0
+- `altair-retry` 0.1.0
+- `altair-config` 0.1.0
+- `altair-otel` 0.1.0
+
+Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
+`altair-server` (axum), `altair-rest` (reqwest), `altair-db` (sqlx).
 
 ## Status Legend
 
