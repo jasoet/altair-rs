@@ -5,13 +5,20 @@ Tracks the migration status of every package from [`github.com/jasoet/pkg`](http
 **Last updated:** 2026-05-28
 **Reference Go version:** v2.13.0
 
-## v0.1.0 — Starter set ready for release
+## v0.1.x — Starter set published
 
-All four starter crates implemented, tested, and ready for crates.io publish via `release-plz`:
-- `altair-concurrent` 0.1.0
-- `altair-retry` 0.1.0
-- `altair-config` 0.1.0
-- `altair-otel` 0.1.0
+All four starter crates published to crates.io:
+
+| Crate | Latest |
+|---|---|
+| [`altair-concurrent`](https://crates.io/crates/altair-concurrent) | 0.1.1 |
+| [`altair-retry`](https://crates.io/crates/altair-retry) | 0.1.1 |
+| [`altair-config`](https://crates.io/crates/altair-config) | 0.1.1 |
+| [`altair-otel`](https://crates.io/crates/altair-otel) | 0.1.1 |
+
+**Release notes:**
+- **0.1.0** (2026-05-27) — initial release of starter scaffolding
+- **0.1.1** (2026-05-27) — wire `MeterProvider` and real `shutdown()` in `altair-otel`; accept `CancellationToken` in `altair-retry`; typed `PartialExecutor` for per-task results in `altair-concurrent`; coverage 85% → 89.6%
 
 Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
 `altair-server` (axum), `altair-rest` (reqwest), `altair-db` (sqlx).
@@ -26,14 +33,14 @@ Next milestone: depends on real-world need. Most likely candidates from `Awaitin
 | 💤 **Deferred** | Known scope, no current plan; revisit when demand appears |
 | ❌ **Won't Port** | Intentionally not migrating (rationale in notes) |
 
-## Starter Set — `v0.1.0`
+## Starter Set — `v0.1.x`
 
 | Go package | Rust crate | Status | Underlying libs | Notes |
 |---|---|---|---|---|
-| `otel` + `logging` | `altair-otel` | 🚧 In Progress | `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `tracing-opentelemetry`, `tracing-subscriber` | Go's two packages merged — `tracing` is the unifier in Rust |
-| `config` | `altair-config` | 🚧 In Progress | `figment` (toml feature), `validator`, `serde`, `toml` | Thin wrapper; TOML-only (Rust ecosystem default) |
-| `retry` | `altair-retry` | 🚧 In Progress | `backon`, `tracing`, `tokio-util` | OTel via global `tracing` subscriber |
-| `concurrent` | `altair-concurrent` | 🚧 In Progress | `tokio`, `tokio-util`, `tracing` | Most original code in starter set (named keying over `JoinSet`) |
+| `otel` + `logging` | `altair-otel` | ✅ Done | `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, `tracing-opentelemetry`, `tracing-subscriber` | Go's two packages merged — `tracing` is the unifier in Rust |
+| `config` | `altair-config` | ✅ Done | `figment` (toml feature), `validator`, `serde`, `toml` | Thin wrapper; TOML-only (Rust ecosystem default) |
+| `retry` | `altair-retry` | ✅ Done | `backon`, `tracing`, `tokio-util` | OTel via global `tracing` subscriber |
+| `concurrent` | `altair-concurrent` | ✅ Done | `tokio`, `tokio-util`, `tracing` | Most original code in starter set (named keying over `JoinSet`) |
 
 ## Awaiting Demand
 
