@@ -41,8 +41,23 @@ where
         retry.max_attempts = config.max_retries + 1,
     );
 
+    let cancellation = config.cancellation_token.clone();
+
     async {
         loop {
+            if let Some(token) = &cancellation
+                && token.is_cancelled()
+            {
+                tracing::warn!(
+                    retry.outcome = "cancelled",
+                    retry.attempts = attempt,
+                    "retry cancelled before attempt",
+                );
+                return Err(Error::Cancelled {
+                    name: config.name.clone(),
+                });
+            }
+
             attempt += 1;
             let attempt_span = info_span!("retry.attempt", retry.attempt = attempt,);
 
@@ -78,7 +93,23 @@ where
                             retry.delay_ms = delay.as_millis() as u64,
                             "retrying after backoff",
                         );
-                        tokio::time::sleep(delay).await;
+                        if let Some(token) = &cancellation {
+                            tokio::select! {
+                                () = tokio::time::sleep(delay) => {}
+                                () = token.cancelled() => {
+                                    tracing::warn!(
+                                        retry.outcome = "cancelled",
+                                        retry.attempts = attempt,
+                                        "retry cancelled during backoff",
+                                    );
+                                    return Err(Error::Cancelled {
+                                        name: config.name.clone(),
+                                    });
+                                }
+                            }
+                        } else {
+                            tokio::time::sleep(delay).await;
+                        }
                     } else {
                         tracing::warn!(
                             retry.outcome = "exhausted",
@@ -159,6 +190,48 @@ mod tests {
             Err(Error::Exhausted { attempts, .. }) => assert_eq!(attempts, 4),
             other => panic!("expected Exhausted, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn cancellation_token_pre_check_aborts() {
+        use tokio_util::sync::CancellationToken;
+        let token = CancellationToken::new();
+        token.cancel();
+        let cfg = Config::builder()
+            .name("pre_cancelled")
+            .max_retries(3)
+            .initial_interval(Duration::from_millis(1))
+            .jitter(false)
+            .cancellation_token(token)
+            .build();
+        let r: Result<u32> = retry(cfg, || async {
+            Err::<u32, _>(std::io::Error::other("never reached"))
+        })
+        .await;
+        assert!(matches!(r, Err(Error::Cancelled { .. })));
+    }
+
+    #[tokio::test]
+    async fn cancellation_during_backoff_aborts() {
+        use tokio_util::sync::CancellationToken;
+        let token = CancellationToken::new();
+        let inner = token.clone();
+        let cfg = Config::builder()
+            .name("backoff_cancel")
+            .max_retries(5)
+            .initial_interval(Duration::from_millis(50))
+            .jitter(false)
+            .cancellation_token(inner)
+            .build();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            token.cancel();
+        });
+        let r: Result<u32> = retry(cfg, || async {
+            Err::<u32, _>(std::io::Error::other("transient"))
+        })
+        .await;
+        assert!(matches!(r, Err(Error::Cancelled { .. })));
     }
 
     #[tokio::test]
