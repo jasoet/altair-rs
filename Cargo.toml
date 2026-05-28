@@ -5,6 +5,7 @@ members = [
     "crates/altair-retry",
     "crates/altair-config",
     "crates/altair-otel",
+    "crates/altair-base32",
 ]
 
 [workspace.package]
