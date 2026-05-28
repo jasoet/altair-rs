@@ -49,6 +49,11 @@ toml = "0.8"
 # Encoding
 base32 = "0.5"
 
+# Archiving / compression
+flate2 = "1"
+tar = "0.4"
+zip = "0.8"
+
 # Retry
 backon = "1"
 
