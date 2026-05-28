@@ -2,7 +2,7 @@
 
 Tracks the migration status of every package from [`github.com/jasoet/pkg`](https://github.com/jasoet/pkg) (Go) to its Rust equivalent in `altair-rs`.
 
-**Last updated:** 2026-05-28 (altair-rest 0.1.2 in flight)
+**Last updated:** 2026-05-28 (altair-rest 0.1.2 published)
 **Reference Go version:** v2.13.0
 
 ## Published crates
@@ -17,7 +17,7 @@ All crates live on crates.io:
 | [`altair-otel`](https://crates.io/crates/altair-otel) | 0.1.2 |
 | [`altair-base32`](https://crates.io/crates/altair-base32) | 0.1.2 |
 | [`altair-compress`](https://crates.io/crates/altair-compress) | 0.1.2 |
-| [`altair-rest`](https://crates.io/crates/altair-rest) | 0.1.2 (date TBD on publish) |
+| [`altair-rest`](https://crates.io/crates/altair-rest) | 0.1.2 |
 
 **Release notes:**
 - **0.1.0** (2026-05-27) — initial release of starter scaffolding
@@ -25,7 +25,7 @@ All crates live on crates.io:
 - **0.1.2** (2026-05-27) — expanded crate READMEs with examples; `altair-otel` re-exports `KeyValue`
 - **`altair-base32` 0.1.2** (2026-05-28) — Crockford Base32 encode/decode for bytes and `u64`, plus Mod-37 check digit. Lenient decoding per spec. Published at workspace version 0.1.2 rather than 0.1.0 because it inherits `version.workspace`.
 - **`altair-compress` 0.1.2** (2026-05-28) — Path-based recipes for gzip, tar, zip, and tar.gz with zip-slip protection. Re-exports `flate2`, `tar`, `zip` for power users.
-- **`altair-rest` 0.1.2** (date TBD on publish) — Resilient HTTP client built on `reqwest`. Built-in retries via `reqwest-retry` + tracing via `reqwest-tracing`. JSON helpers (`get_json`/`post_json`) for the 80% case.
+- **`altair-rest` 0.1.2** (2026-05-28) — Resilient HTTP client built on `reqwest`. Built-in retries via `reqwest-retry` + tracing via `reqwest-tracing`. JSON helpers (`get_json`/`post_json`) for the 80% case.
 
 Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
 `altair-server` (axum), `altair-rest` (reqwest), `altair-db` (sqlx).
