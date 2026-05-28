@@ -53,7 +53,7 @@ base32 = "0.5"
 # Archiving / compression
 flate2 = "1"
 tar = "0.4"
-zip = "9.0.0-pre2"
+zip = "8"
 
 # Retry
 backon = "1"
