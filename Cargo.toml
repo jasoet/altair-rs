@@ -6,6 +6,7 @@ members = [
     "crates/altair-config",
     "crates/altair-otel",
     "crates/altair-base32",
+    "crates/altair-compress",
 ]
 
 [workspace.package]
@@ -52,7 +53,7 @@ base32 = "0.5"
 # Archiving / compression
 flate2 = "1"
 tar = "0.4"
-zip = "0.8"
+zip = "9.0.0-pre2"
 
 # Retry
 backon = "1"
