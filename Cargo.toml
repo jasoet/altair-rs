@@ -45,6 +45,9 @@ validator = { version = "0.20", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 
+# Encoding
+base32 = "0.5"
+
 # Retry
 backon = "1"
 
