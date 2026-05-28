@@ -1,0 +1,35 @@
+[package]
+name = "altair-server"
+description = "Axum + tower-http convenience layer with sensible defaults and graceful shutdown"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["http", "server", "axum", "tower", "web"]
+categories = ["network-programming", "web-programming::http-server"]
+
+[dependencies]
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+reqwest = { workspace = true, features = ["json"] }
+pretty_assertions = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+http = "1"
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true
