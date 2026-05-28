@@ -32,7 +32,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 async-trait = "0.1"
 # Sibling crate for the with_otel example only.
-altair-otel = { path = "../altair-otel" }
+altair-otel = { path = "../altair-otel", version = "0.1" }
 
 [lints]
 workspace = true

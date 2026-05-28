@@ -31,7 +31,7 @@ serde_json = { workspace = true }
 http = "1"
 tower = { workspace = true, features = ["util"] }
 # Sibling crate for the with_otel example only.
-altair-otel = { path = "../altair-otel" }
+altair-otel = { path = "../altair-otel", version = "0.1" }
 
 [lints]
 workspace = true
