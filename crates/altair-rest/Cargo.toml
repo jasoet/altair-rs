@@ -13,7 +13,7 @@ keywords = ["http", "client", "reqwest", "retry", "tracing"]
 categories = ["network-programming", "web-programming::http-client"]
 
 [dependencies]
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 reqwest-tracing = { workspace = true }
@@ -28,6 +28,9 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 pretty_assertions = { workspace = true }
 anyhow = { workspace = true }
 wiremock = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = "0.1"
 
 [lints]
 workspace = true
