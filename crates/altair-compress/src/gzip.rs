@@ -54,14 +54,17 @@ mod tests {
         let compressed = dir.path().join("in.bin.gz");
         let output = dir.path().join("out.bin");
 
-        let payload: Vec<u8> = (0..1024).map(|i| (i % 256) as u8).collect();
+        let payload: Vec<u8> = (0u32..1024).map(|i| (i % 256) as u8).collect();
         File::create(&input).unwrap().write_all(&payload).unwrap();
 
         compress_file(&input, &compressed).unwrap();
         decompress_file(&compressed, &output).unwrap();
 
         let mut roundtripped = Vec::new();
-        File::open(&output).unwrap().read_to_end(&mut roundtripped).unwrap();
+        File::open(&output)
+            .unwrap()
+            .read_to_end(&mut roundtripped)
+            .unwrap();
         assert_eq!(roundtripped, payload);
     }
 

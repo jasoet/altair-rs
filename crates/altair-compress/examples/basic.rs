@@ -24,12 +24,18 @@ fn main() -> anyhow::Result<()> {
     // 3. tar.gz the same directory
     let tarball_path = work.path().join("project.tar.gz");
     tar_gz_dir(&project, &tarball_path)?;
-    println!("tar.gz archive: {} bytes", fs::metadata(&tarball_path)?.len());
+    println!(
+        "tar.gz archive: {} bytes",
+        fs::metadata(&tarball_path)?.len()
+    );
 
     // 4. Round-trip the tarball
     let restored = work.path().join("restored");
     untar_gz(&tarball_path, &restored)?;
-    println!("restored README: {:?}", fs::read_to_string(restored.join("README.md"))?);
+    println!(
+        "restored README: {:?}",
+        fs::read_to_string(restored.join("README.md"))?
+    );
 
     Ok(())
 }

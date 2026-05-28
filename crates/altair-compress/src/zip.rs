@@ -2,10 +2,10 @@
 
 use crate::error::{Error, Result};
 use crate::safe_path;
+use ::zip::write::SimpleFileOptions;
 use std::fs::{File, create_dir_all};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
-use ::zip::write::SimpleFileOptions;
 
 /// Archive `source_dir`'s contents recursively into a zip file at `output`,
 /// using DEFLATE compression for each entry.
@@ -28,8 +28,8 @@ pub fn zip_dir(source_dir: impl AsRef<Path>, output: impl AsRef<Path>) -> Result
     let output_file = File::create(output.as_ref())?;
     let writer = BufWriter::new(output_file);
     let mut zip_writer = ::zip::ZipWriter::new(writer);
-    let options = SimpleFileOptions::default()
-        .compression_method(::zip::CompressionMethod::Deflated);
+    let options =
+        SimpleFileOptions::default().compression_method(::zip::CompressionMethod::Deflated);
 
     walk_and_add(&mut zip_writer, source, source, options)?;
     zip_writer.finish()?;
@@ -78,11 +78,9 @@ pub fn unzip(archive: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()
 
     for i in 0..zip_archive.len() {
         let mut entry = zip_archive.by_index(i)?;
-        let entry_path = entry
-            .enclosed_name()
-            .ok_or_else(|| Error::UnsafePath {
-                path: Path::new(entry.name()).to_path_buf(),
-            })?;
+        let entry_path = entry.enclosed_name().ok_or_else(|| Error::UnsafePath {
+            path: Path::new(entry.name()).to_path_buf(),
+        })?;
         let safe_dest = safe_path::resolve(dest, &entry_path)?;
 
         if entry.is_dir() {

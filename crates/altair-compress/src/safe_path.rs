@@ -22,12 +22,7 @@ use std::path::{Component, Path, PathBuf};
 pub(crate) fn resolve(dest_root: &Path, entry_path: &Path) -> Result<PathBuf> {
     for component in entry_path.components() {
         match component {
-            Component::Prefix(_) | Component::RootDir => {
-                return Err(Error::UnsafePath {
-                    path: entry_path.to_path_buf(),
-                });
-            }
-            Component::ParentDir => {
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
                 return Err(Error::UnsafePath {
                     path: entry_path.to_path_buf(),
                 });

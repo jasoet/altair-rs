@@ -113,63 +113,46 @@ mod tests {
 
     #[test]
     fn untar_rejects_parent_dir_entry() {
-        // Hand-craft a tar archive containing an entry "../escape.txt"
-        // Note: use set_size without header.set_cksum() to create a valid but unusual tar
+        // The tar crate rejects `..` paths in `Header::set_path`, so we cannot
+        // produce a malicious archive via the high-level API. Hand-craft a
+        // minimal valid ustar header pointing at `../escape.txt` and write it
+        // raw to verify our extract-side mitigation works.
+        use std::io::Write;
+
         let work = TempDir::new().unwrap();
         let archive = work.path().join("malicious.tar");
-        {
-            // Create a minimal raw tar entry with parent directory traversal
-            let mut tar_data = Vec::new();
-            // We'll create the tarball manually to bypass tar library's path validation
-            use std::io::Write;
 
-            // Simple tar header for ../escape.txt (512 bytes)
-            let mut header = [0u8; 512];
-            // File name (first 100 bytes)
-            let name = b"../escape.txt";
-            header[..name.len()].copy_from_slice(name);
-            // Mode (offset 100, 8 bytes)
-            let mode = b"0000644\0";
-            header[100..108].copy_from_slice(mode);
-            // Owner uid (offset 108, 8 bytes)
-            let uid = b"0000000\0";
-            header[108..116].copy_from_slice(uid);
-            // Group uid (offset 116, 8 bytes)
-            let gid = b"0000000\0";
-            header[116..124].copy_from_slice(gid);
-            // File size (offset 124, 12 bytes) - 5 bytes = "oops!"
-            let size = b"00000000005\0";
-            header[124..136].copy_from_slice(size);
-            // Modification time (offset 136, 12 bytes)
-            let mtime = b"00000000000\0";
-            header[136..148].copy_from_slice(mtime);
-            // Checksum (offset 148, 8 bytes) - filled with spaces initially
-            for i in 148..156 {
-                header[i] = b' ';
-            }
-            // Type flag (offset 156, 1 byte) - '0' for regular file
-            header[156] = b'0';
-            // Link name (offset 157, 100 bytes) - all zeros
-            // ustar indicator (offset 257, 6 bytes)
-            let ustar = b"ustar\0";
-            header[257..263].copy_from_slice(ustar);
+        let mut header = [0u8; 512];
+        let name = b"../escape.txt";
+        header[..name.len()].copy_from_slice(name);
+        header[100..108].copy_from_slice(b"0000644\0");
+        header[108..116].copy_from_slice(b"0000000\0");
+        header[116..124].copy_from_slice(b"0000000\0");
+        header[124..136].copy_from_slice(b"00000000005\0"); // size=5
+        header[136..148].copy_from_slice(b"00000000000\0"); // mtime
+        // Checksum field is initially eight spaces while we sum the rest.
+        header[148..156].fill(b' ');
+        header[156] = b'0'; // type = regular file
+        header[257..263].copy_from_slice(b"ustar\0");
 
-            // Calculate checksum
-            let checksum: u32 = header.iter().map(|&b| b as u32).sum();
-            let checksum_str = format!("{:06o}\0 ", checksum);
-            header[148..156].copy_from_slice(checksum_str.as_bytes());
+        // Compute the checksum and write it in octal at offset 148.
+        let checksum: u32 = header.iter().map(|&b| u32::from(b)).sum();
+        let checksum_str = format!("{checksum:06o}\0 ");
+        header[148..156].copy_from_slice(checksum_str.as_bytes());
 
-            tar_data.extend_from_slice(&header);
-            tar_data.extend_from_slice(b"oops!");
-            // Pad to 512-byte boundary
-            while tar_data.len() % 512 != 0 {
-                tar_data.push(0);
-            }
-            // Add two zero blocks to mark end of archive
-            tar_data.extend_from_slice(&[0u8; 1024]);
-
-            File::create(&archive).unwrap().write_all(&tar_data).unwrap();
+        let mut tar_data = Vec::with_capacity(2048);
+        tar_data.extend_from_slice(&header);
+        tar_data.extend_from_slice(b"oops!");
+        // Pad to 512-byte boundary then add two empty blocks (archive terminator).
+        while !tar_data.len().is_multiple_of(512) {
+            tar_data.push(0);
         }
+        tar_data.extend_from_slice(&[0u8; 1024]);
+
+        File::create(&archive)
+            .unwrap()
+            .write_all(&tar_data)
+            .unwrap();
 
         let restored = work.path().join("restored");
         let result = untar(&archive, &restored);
