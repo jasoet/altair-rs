@@ -8,6 +8,7 @@ members = [
     "crates/altair-base32",
     "crates/altair-compress",
     "crates/altair-rest",
+    "crates/altair-server",
 ]
 
 [workspace.package]
@@ -65,6 +66,12 @@ serde_json = "1"
 url = "2"
 http = "1"
 wiremock = "0.6"
+
+# HTTP server
+axum = { version = "0.8", default-features = true }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "request-id", "timeout", "cors", "compression-full", "util"] }
+uuid = { version = "1", features = ["v4"] }
 
 # Retry
 backon = "1"
