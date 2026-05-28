@@ -13,6 +13,7 @@ Production-ready Rust utility crates for tokio applications. Each crate wraps a 
 | [`altair-base32`](crates/altair-base32) | Crockford Base32 — bytes, u64 IDs, optional check digit | [![crate](https://img.shields.io/crates/v/altair-base32.svg)](https://crates.io/crates/altair-base32) |
 | [`altair-compress`](crates/altair-compress) | gzip + tar + zip + tar.gz recipes with zip-slip protection | [![crate](https://img.shields.io/crates/v/altair-compress.svg)](https://crates.io/crates/altair-compress) |
 | [`altair-rest`](crates/altair-rest) | Resilient HTTP client — reqwest + retry + tracing baked in | [![crate](https://img.shields.io/crates/v/altair-rest.svg)](https://crates.io/crates/altair-rest) |
+| [`altair-server`](crates/altair-server) | Axum + tower-http convenience layer with sensible defaults | [![crate](https://img.shields.io/crates/v/altair-server.svg)](https://crates.io/crates/altair-server) |
 
 Pick one, several, or all four — each is usable standalone. Pair `altair-otel` with any of the others and tracing flows automatically (spans + metrics).
 
