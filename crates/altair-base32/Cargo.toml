@@ -1,0 +1,24 @@
+[package]
+name = "altair-base32"
+description = "Crockford Base32 encoding with u64 helpers and Mod-37 check digit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["base32", "crockford", "encoding", "ulid", "id"]
+categories = ["encoding"]
+
+[dependencies]
+base32 = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

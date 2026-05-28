@@ -5,6 +5,7 @@ members = [
     "crates/altair-retry",
     "crates/altair-config",
     "crates/altair-otel",
+    "crates/altair-base32",
 ]
 
 [workspace.package]
@@ -44,6 +45,9 @@ figment = { version = "0.10", features = ["toml", "env"] }
 validator = { version = "0.20", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+
+# Encoding
+base32 = "0.5"
 
 # Retry
 backon = "1"
