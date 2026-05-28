@@ -25,6 +25,8 @@ pretty_assertions = { workspace = true }
 assert_matches = { workspace = true }
 anyhow = { workspace = true }
 tracing-subscriber = { workspace = true }
+# Sibling crate for the with_otel example only.
+altair-otel = { path = "../altair-otel" }
 
 [lints]
 workspace = true
