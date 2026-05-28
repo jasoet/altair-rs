@@ -28,6 +28,8 @@ pretty_assertions = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+http = "1"
+tower = { workspace = true, features = ["util"] }
 
 [lints]
 workspace = true
