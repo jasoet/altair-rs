@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.1.3] - 2026-05-28
+
+
+### Documentation
+
+- Cross-crate with_otel examples for retry/concurrent/rest/server ([#22](https://github.com/jasoet/altair-rs/pull/22))
+- Add focused runnable examples per crate (30 new) ([#16](https://github.com/jasoet/altair-rs/pull/16))
+
 ## [0.1.2] - 2026-05-27
 
 
