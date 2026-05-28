@@ -11,6 +11,7 @@ Production-ready Rust utility crates for tokio applications. Each crate wraps a 
 | [`altair-retry`](crates/altair-retry) | Async retry with exponential backoff and per-attempt tracing | [![crate](https://img.shields.io/crates/v/altair-retry.svg)](https://crates.io/crates/altair-retry) |
 | [`altair-concurrent`](crates/altair-concurrent) | Type-safe parallel execution of named async tasks | [![crate](https://img.shields.io/crates/v/altair-concurrent.svg)](https://crates.io/crates/altair-concurrent) |
 | [`altair-base32`](crates/altair-base32) | Crockford Base32 — bytes, u64 IDs, optional check digit | [![crate](https://img.shields.io/crates/v/altair-base32.svg)](https://crates.io/crates/altair-base32) |
+| [`altair-compress`](crates/altair-compress) | gzip + tar + zip + tar.gz recipes with zip-slip protection | [![crate](https://img.shields.io/crates/v/altair-compress.svg)](https://crates.io/crates/altair-compress) |
 
 Pick one, several, or all four — each is usable standalone. Pair `altair-otel` with any of the others and tracing flows automatically (spans + metrics).
 

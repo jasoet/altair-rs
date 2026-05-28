@@ -16,12 +16,14 @@ All crates live on crates.io:
 | [`altair-config`](https://crates.io/crates/altair-config) | 0.1.2 |
 | [`altair-otel`](https://crates.io/crates/altair-otel) | 0.1.2 |
 | [`altair-base32`](https://crates.io/crates/altair-base32) | 0.1.2 |
+| [`altair-compress`](https://crates.io/crates/altair-compress) | 0.1.2 (date TBD on publish) |
 
 **Release notes:**
 - **0.1.0** (2026-05-27) — initial release of starter scaffolding
 - **0.1.1** (2026-05-27) — wire `MeterProvider` and real `shutdown()` in `altair-otel`; accept `CancellationToken` in `altair-retry`; typed `PartialExecutor` for per-task results in `altair-concurrent`; coverage 85% → 89.6%
 - **0.1.2** (2026-05-27) — expanded crate READMEs with examples; `altair-otel` re-exports `KeyValue`
 - **`altair-base32` 0.1.2** (2026-05-28) — Crockford Base32 encode/decode for bytes and `u64`, plus Mod-37 check digit. Lenient decoding per spec. Published at workspace version 0.1.2 rather than 0.1.0 because it inherits `version.workspace`.
+- **`altair-compress` 0.1.2** (date TBD on publish) — Path-based recipes for gzip, tar, zip, and tar.gz with zip-slip protection. Re-exports `flate2`, `tar`, `zip` for power users.
 
 Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
 `altair-server` (axum), `altair-rest` (reqwest), `altair-db` (sqlx).
@@ -45,6 +47,7 @@ Next milestone: depends on real-world need. Most likely candidates from `Awaitin
 | `retry` | `altair-retry` | ✅ Done | `backon`, `tracing`, `tokio-util` | OTel via global `tracing` subscriber |
 | `concurrent` | `altair-concurrent` | ✅ Done | `tokio`, `tokio-util`, `tracing` | Most original code in starter set (named keying over `JoinSet`) |
 | `base32` | `altair-base32` | ✅ Done | `base32` (Crockford alphabet) + in-crate Mod-37 check | Crockford Base32 — small focused crate |
+| `compress` | `altair-compress` | ✅ Done | `flate2`, `tar`, `zip` | Path-based recipes with zip-slip protection |
 
 ## Awaiting Demand
 
@@ -56,7 +59,6 @@ These have clear Rust equivalents and will be added when a project needs them.
 | `server` | `altair-server` | 💤 Deferred | `axum`, `tower`, `tower-http` | Closest Rust analog to Echo |
 | `grpc` | `altair-grpc` | 💤 Deferred | `tonic`, `tower` | `tonic` = de-facto Rust gRPC |
 | `rest` | `altair-rest` | 💤 Deferred | `reqwest`, `reqwest-middleware`, `reqwest-retry` | Resilient HTTP client |
-| `compress` | `altair-compress` | 💤 Deferred | `flate2`, `tar`, `zip` | Direct equivalents exist |
 | `ssh` | `altair-ssh` | 💤 Deferred | `russh` | Async pure-Rust SSH |
 | `docker` | `altair-docker` | 💤 Deferred | `bollard`, `testcontainers` | `testcontainers-rs` is mature |
 
