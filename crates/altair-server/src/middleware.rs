@@ -14,6 +14,7 @@
 //! request-id and trace context.
 
 use axum::Router;
+use axum::http::StatusCode;
 use std::time::Duration;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
@@ -39,7 +40,10 @@ impl DefaultStack {
         let mut router = router;
 
         // Innermost first because Router::layer wraps outwards.
-        router = router.layer(TimeoutLayer::new(self.timeout));
+        router = router.layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            self.timeout,
+        ));
 
         if self.compression {
             router = router.layer(CompressionLayer::new());

@@ -18,7 +18,6 @@ pub struct Server {
 
 impl Server {
     /// Start building a new server.
-    #[must_use]
     pub fn builder() -> ServerBuilder {
         ServerBuilder::new()
     }

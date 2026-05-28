@@ -21,6 +21,7 @@ const DEFAULT_HEALTH_PATH: &str = "/health";
 ///
 /// Construct via [`Server::builder`](crate::Server::builder).
 #[must_use]
+#[allow(clippy::struct_excessive_bools)] // each toggle is an independent middleware knob
 pub struct ServerBuilder {
     bind_addr: String,
     router: Router<()>,
@@ -151,10 +152,9 @@ impl ServerBuilder {
 
     /// Bind the listener and build a [`Server`] ready to run.
     pub async fn build(self) -> Result<Server> {
-        let addr: SocketAddr = self
-            .bind_addr
-            .parse()
-            .map_err(|e| Error::Configuration(format!("invalid bind address '{}': {e}", self.bind_addr)))?;
+        let addr: SocketAddr = self.bind_addr.parse().map_err(|e| {
+            Error::Configuration(format!("invalid bind address '{}': {e}", self.bind_addr))
+        })?;
 
         let listener = TcpListener::bind(addr).await.map_err(|e| Error::Bind {
             addr: self.bind_addr.clone(),

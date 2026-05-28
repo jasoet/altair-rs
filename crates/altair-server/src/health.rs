@@ -36,8 +36,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::StatusCode;
     use axum::body::Body;
+    use axum::http::StatusCode;
     use http::Request;
     use tower::ServiceExt;
 
@@ -93,9 +93,8 @@ mod tests {
 
     #[tokio::test]
     async fn custom_responder_runs() {
-        let responder: HealthResponder = Arc::new(|| {
-            (StatusCode::SERVICE_UNAVAILABLE, "db down").into_response()
-        });
+        let responder: HealthResponder =
+            Arc::new(|| (StatusCode::SERVICE_UNAVAILABLE, "db down").into_response());
         let router = install(Router::new(), true, "/health", responder);
         let response = router
             .oneshot(

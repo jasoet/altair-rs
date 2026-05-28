@@ -1,8 +1,8 @@
 //! End-to-end behaviour tests: bind ephemeral port, hit it with reqwest,
 //! verify response details.
 
-use altair_server::prelude::*;
 use altair_server::axum::routing::get;
+use altair_server::prelude::*;
 use pretty_assertions::assert_eq;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -33,10 +33,8 @@ async fn default_health_endpoint_returns_200() {
 
 #[tokio::test]
 async fn user_route_returns_handler_body() {
-    let (addr, shutdown) = start_server(
-        Server::builder().route("/greet", get(|| async { "hello world" })),
-    )
-    .await;
+    let (addr, shutdown) =
+        start_server(Server::builder().route("/greet", get(|| async { "hello world" }))).await;
     let body = reqwest::get(format!("http://{addr}/greet"))
         .await
         .unwrap()
@@ -49,10 +47,7 @@ async fn user_route_returns_handler_body() {
 
 #[tokio::test]
 async fn request_id_header_is_echoed() {
-    let (addr, shutdown) = start_server(
-        Server::builder().route("/", get(|| async { "ok" })),
-    )
-    .await;
+    let (addr, shutdown) = start_server(Server::builder().route("/", get(|| async { "ok" }))).await;
     let response = reqwest::get(format!("http://{addr}/")).await.unwrap();
     assert!(response.headers().contains_key("x-request-id"));
     let _ = shutdown.send(());

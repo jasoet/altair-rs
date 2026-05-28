@@ -55,11 +55,11 @@ mod tests {
         // the future is well-formed by racing it against an immediate
         // tokio::time::sleep — the sleep should win, proving shutdown_signal
         // hasn't already completed.
-        let result = tokio::time::timeout(
-            std::time::Duration::from_millis(50),
-            shutdown_signal(),
-        )
-        .await;
-        assert!(result.is_err(), "shutdown_signal should not complete in 50ms");
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(50), shutdown_signal()).await;
+        assert!(
+            result.is_err(),
+            "shutdown_signal should not complete in 50ms"
+        );
     }
 }
