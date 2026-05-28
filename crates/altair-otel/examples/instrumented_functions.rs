@@ -19,9 +19,7 @@ struct User {
 
 impl Database {
     fn find_user(&self, id: u64) -> Option<User> {
-        self.users.get(&id).map(|name| User {
-            name: name.clone(),
-        })
+        self.users.get(&id).map(|name| User { name: name.clone() })
     }
 }
 
