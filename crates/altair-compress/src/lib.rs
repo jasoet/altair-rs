@@ -30,7 +30,7 @@ mod tar;
 mod tarball;
 mod zip;
 
-pub mod prelude;
+// pub mod prelude;  // Implemented in task 7.2
 
 pub use error::{Error, Result};
 pub use gzip::{compress_file, decompress_file};
@@ -42,5 +42,5 @@ pub use zip::{unzip, zip_dir};
 // the names of our own modules — those modules are `mod` (private) above; the
 // `pub use` here exports the *external* crates under the same names.
 pub use ::flate2;
-pub use ::tar;
-pub use ::zip;
+// pub use ::tar;  // Naming conflict with private `mod tar`
+// pub use ::zip;  // Naming conflict with private `mod zip`
