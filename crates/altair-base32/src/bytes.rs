@@ -20,7 +20,7 @@ const CROCKFORD: Alphabet = Alphabet::Crockford;
 /// No padding. No hyphenation.
 ///
 /// ```
-/// assert_eq!(altair_base32::encode(b"hi"), "D1JPW");
+/// assert_eq!(altair_base32::encode(b"hi"), "D1MG");
 /// ```
 #[must_use]
 pub fn encode(data: &[u8]) -> String {
@@ -33,7 +33,7 @@ pub fn encode(data: &[u8]) -> String {
 /// hyphens stripped silently.
 ///
 /// ```
-/// let plain = altair_base32::decode("D1JPW").unwrap();
+/// let plain = altair_base32::decode("D1MG").unwrap();
 /// assert_eq!(plain, b"hi");
 /// ```
 pub fn decode(text: &str) -> Result<Vec<u8>> {
