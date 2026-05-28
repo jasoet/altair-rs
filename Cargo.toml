@@ -7,6 +7,7 @@ members = [
     "crates/altair-otel",
     "crates/altair-base32",
     "crates/altair-compress",
+    "crates/altair-rest",
 ]
 
 [workspace.package]
