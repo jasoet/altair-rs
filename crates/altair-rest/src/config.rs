@@ -4,10 +4,7 @@ use crate::client::Client;
 use crate::error::{Error, Result};
 use http::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
 use reqwest_middleware::{ClientBuilder as MiddlewareBuilder, Middleware};
-use reqwest_retry::{
-    RetryTransientMiddleware,
-    policies::ExponentialBackoff,
-};
+use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use reqwest_tracing::TracingMiddleware;
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,17 +33,15 @@ pub struct ClientBuilder {
     retry_initial_interval: Duration,
     retry_max_interval: Duration,
     enable_tracing: bool,
-    reqwest_customize: Option<Box<dyn FnOnce(reqwest::ClientBuilder) -> reqwest::ClientBuilder + Send>>,
+    reqwest_customize:
+        Option<Box<dyn FnOnce(reqwest::ClientBuilder) -> reqwest::ClientBuilder + Send>>,
     extra_middleware: Vec<Arc<dyn Middleware>>,
 }
 
 impl Default for ClientBuilder {
     fn default() -> Self {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            USER_AGENT,
-            HeaderValue::from_static(DEFAULT_USER_AGENT),
-        );
+        headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
         Self {
             base_url: None,
             timeout: DEFAULT_TIMEOUT,
@@ -94,7 +89,7 @@ impl ClientBuilder {
     /// Override the `User-Agent` header. Default: `altair-rest/<version>`.
     pub fn user_agent(mut self, ua: impl Into<String>) -> Self {
         let ua_string = ua.into();
-        self.user_agent = ua_string.clone();
+        self.user_agent.clone_from(&ua_string);
         if let Ok(value) = HeaderValue::from_str(&ua_string) {
             self.headers.insert(USER_AGENT, value);
         }
@@ -105,8 +100,8 @@ impl ClientBuilder {
     pub fn default_header(mut self, name: &str, value: &str) -> Result<Self> {
         let header_name = HeaderName::from_bytes(name.as_bytes())
             .map_err(|e| Error::InvalidHeader(format!("name '{name}': {e}")))?;
-        let header_value =
-            HeaderValue::from_str(value).map_err(|e| Error::InvalidHeader(format!("value: {e}")))?;
+        let header_value = HeaderValue::from_str(value)
+            .map_err(|e| Error::InvalidHeader(format!("value: {e}")))?;
         self.headers.insert(header_name, header_value);
         Ok(self)
     }
@@ -223,7 +218,9 @@ mod tests {
 
     #[test]
     fn base_url_parsing_accepts_valid_url() {
-        let cb = ClientBuilder::new().base_url("https://api.example.com/").unwrap();
+        let cb = ClientBuilder::new()
+            .base_url("https://api.example.com/")
+            .unwrap();
         assert!(cb.base_url.is_some());
     }
 

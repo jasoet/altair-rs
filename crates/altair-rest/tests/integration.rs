@@ -3,8 +3,8 @@
 use altair_rest::prelude::*;
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Respond, ResponseTemplate};
@@ -20,13 +20,10 @@ async fn get_json_round_trip() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/users/1"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(User {
-                    id: 1,
-                    name: "alice".into(),
-                }),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(User {
+            id: 1,
+            name: "alice".into(),
+        }))
         .mount(&server)
         .await;
 
@@ -51,13 +48,10 @@ async fn post_json_round_trip() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/users"))
-        .respond_with(
-            ResponseTemplate::new(201)
-                .set_body_json(User {
-                    id: 2,
-                    name: "bob".into(),
-                }),
-        )
+        .respond_with(ResponseTemplate::new(201).set_body_json(User {
+            id: 2,
+            name: "bob".into(),
+        }))
         .mount(&server)
         .await;
 

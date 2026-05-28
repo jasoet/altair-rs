@@ -41,8 +41,7 @@ mod tests {
 
     #[test]
     fn decode_error_renders() {
-        let json_err: serde_json::Error =
-            serde_json::from_str::<u32>("not a number").unwrap_err();
+        let json_err: serde_json::Error = serde_json::from_str::<u32>("not a number").unwrap_err();
         let e: Error = json_err.into();
         assert!(e.to_string().starts_with("decode error:"));
     }

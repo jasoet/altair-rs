@@ -2,8 +2,8 @@
 
 use crate::client::Client;
 use crate::error::{Error, Result};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 impl Client {
     /// GET the URL and decode the response body as JSON.
