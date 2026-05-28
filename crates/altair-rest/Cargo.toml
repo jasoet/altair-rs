@@ -1,0 +1,36 @@
+[package]
+name = "altair-rest"
+description = "Resilient HTTP client built on reqwest with retry and OTel-aware tracing baked in"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["http", "client", "reqwest", "retry", "tracing"]
+categories = ["network-programming", "web-programming::http-client"]
+
+[dependencies]
+reqwest = { workspace = true, features = ["json"] }
+reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
+reqwest-tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+http = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+pretty_assertions = { workspace = true }
+anyhow = { workspace = true }
+wiremock = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = "0.1"
+
+[lints]
+workspace = true
