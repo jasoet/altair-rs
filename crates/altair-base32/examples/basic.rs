@@ -7,7 +7,10 @@ fn main() -> anyhow::Result<()> {
     let plaintext = b"hello world";
     let encoded = encode(plaintext);
     println!("encode('hello world') = {encoded}");
-    println!("decode back            = {:?}", String::from_utf8(decode(&encoded)?)?);
+    println!(
+        "decode back            = {:?}",
+        String::from_utf8(decode(&encoded)?)?
+    );
     println!();
 
     // 2. u64 encoding for sortable IDs

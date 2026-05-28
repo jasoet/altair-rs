@@ -4,8 +4,10 @@ use altair_base32::prelude::*;
 use pretty_assertions::assert_eq;
 
 #[test]
+#[allow(clippy::cast_possible_truncation)]
 fn round_trip_1kb_random_data() {
     // Deterministic "random" data — fill with a simple PRNG so the test is reproducible.
+    // Truncation in `(state >> 16) as u8` is intentional — we want the low byte.
     let mut buf = Vec::with_capacity(1024);
     let mut state: u32 = 0xDEAD_BEEF;
     for _ in 0..1024 {
@@ -19,6 +21,7 @@ fn round_trip_1kb_random_data() {
 }
 
 #[test]
+#[allow(clippy::cast_possible_truncation)]
 fn round_trip_1kb_with_check() {
     let mut buf = Vec::with_capacity(1024);
     let mut state: u32 = 0xCAFE_F00D;

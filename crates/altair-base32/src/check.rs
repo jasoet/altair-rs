@@ -55,12 +55,9 @@ pub fn encode_with_check(data: &[u8]) -> String {
 /// - [`Error::InvalidChar`] if the trailing check char isn't in the
 ///   extended alphabet
 pub fn decode_with_check(text: &str) -> Result<Vec<u8>> {
-    if text.is_empty() {
+    let Some((last_pos, found)) = text.char_indices().next_back() else {
         return Err(Error::Empty);
-    }
-    let mut chars = text.char_indices();
-    let last = chars.next_back().expect("non-empty");
-    let (last_pos, found) = last;
+    };
     let body = &text[..last_pos];
 
     let expected_value = check_value_from_char(found).ok_or(Error::InvalidChar {
@@ -88,7 +85,10 @@ fn checksum(data: &[u8]) -> u8 {
     for &b in data {
         acc = (acc * 256 + u32::from(b)) % 37;
     }
-    u8::try_from(acc).expect("0 <= acc < 37")
+    // `acc` is in 0..37 here, which fits in u8.
+    #[allow(clippy::cast_possible_truncation)]
+    let result = acc as u8;
+    result
 }
 
 fn check_char_for(data: &[u8]) -> char {
@@ -102,7 +102,7 @@ fn check_value_from_char(ch: char) -> Option<u8> {
     CHECK_ALPHABET
         .iter()
         .position(|&c| c as char == ch)
-        .map(|i| u8::try_from(i).expect("alphabet has 37 entries"))
+        .and_then(|i| u8::try_from(i).ok())
 }
 
 #[cfg(test)]
@@ -161,7 +161,10 @@ mod tests {
         let last_idx = encoded.len() - 1;
         let original = encoded.as_bytes()[last_idx];
         let replacement = if original == b'1' { b'2' } else { b'1' };
-        encoded.replace_range(last_idx..encoded.len(), std::str::from_utf8(&[replacement]).unwrap());
+        encoded.replace_range(
+            last_idx..encoded.len(),
+            std::str::from_utf8(&[replacement]).unwrap(),
+        );
 
         match decode_with_check(&encoded) {
             Err(Error::CheckMismatch { .. }) => {}

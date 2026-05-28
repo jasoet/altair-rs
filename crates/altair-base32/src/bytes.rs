@@ -60,7 +60,7 @@ pub(crate) fn normalize(text: &str) -> Result<String> {
     let mut out = String::with_capacity(text.len());
     for (position, ch) in text.char_indices() {
         match ch {
-            '-' => continue,
+            '-' => {}
             '0' | 'O' | 'o' => out.push('0'),
             '1' | 'I' | 'i' | 'L' | 'l' => out.push('1'),
             '2'..='9' => out.push(ch),

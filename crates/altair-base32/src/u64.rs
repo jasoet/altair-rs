@@ -26,7 +26,10 @@ pub fn encode_u64(mut n: u64) -> String {
         *slot = ALPHABET[(n & 0b1_1111) as usize];
         n >>= 5;
     }
-    String::from_utf8(buf.to_vec()).expect("ALPHABET contains only ASCII")
+    // ALPHABET contains only ASCII chars (0-9, A-Z), so every byte in `buf`
+    // is a valid `char`. Mapping byte-by-byte avoids the UTF-8 validation
+    // cost (and the `expect` clippy doesn't like).
+    buf.iter().copied().map(char::from).collect()
 }
 
 /// Decode a Crockford Base32 string into a `u64`.

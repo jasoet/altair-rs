@@ -62,9 +62,6 @@ pub fn shutdown() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opentelemetry_sdk::Resource;
-    use opentelemetry_sdk::metrics::SdkMeterProvider;
-    use opentelemetry_sdk::trace::SdkTracerProvider;
 
     #[test]
     fn meter_returns_global_meter() {
@@ -78,40 +75,8 @@ mod tests {
         shutdown();
     }
 
-    fn fresh_cell() -> &'static Mutex<Option<InstalledProviders>> {
-        // Tests share the same global PROVIDERS. We can't reset it, so we
-        // exercise install() in isolation via the public surface only — and
-        // tolerate either install outcome depending on test order.
-        PROVIDERS.get_or_init(|| Mutex::new(None))
-    }
-
-    #[test]
-    fn install_returns_false_when_slot_occupied() {
-        // Pre-populate the cell with a dummy value, then attempt install.
-        let cell = fresh_cell();
-        let resource = Resource::builder().build();
-        let mut guard = cell.lock().unwrap();
-        if guard.is_none() {
-            *guard = Some(InstalledProviders {
-                tracer: SdkTracerProvider::builder()
-                    .with_resource(resource.clone())
-                    .build(),
-                meter: SdkMeterProvider::builder().with_resource(resource).build(),
-            });
-        }
-        drop(guard);
-
-        let res2 = Resource::builder().build();
-        let attempted = install(InstalledProviders {
-            tracer: SdkTracerProvider::builder()
-                .with_resource(res2.clone())
-                .build(),
-            meter: SdkMeterProvider::builder().with_resource(res2).build(),
-        });
-        assert!(!attempted, "install must reject when slot occupied");
-
-        // Drain so shutdown_before_init_is_noop (parallel) still finds slot empty
-        // if it runs after this.
-        let _ = cell.lock().unwrap().take();
-    }
+    // Behaviour of `install()` returning false on a second call is verified
+    // implicitly by `Config::init()` returning `Error::AlreadyInitialized`,
+    // covered in the integration test. Directly poking `PROVIDERS` here was
+    // flaky under parallel test execution (the global is shared across tests).
 }
