@@ -13,8 +13,10 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::missing_errors_doc)]
 
+mod config;
 mod error;
 
+pub use config::{Config, TlsConfig};
 pub use error::{BoxError, Error, Result};
 
 // Underlying-lib re-exports
