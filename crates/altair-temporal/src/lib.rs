@@ -13,11 +13,13 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::missing_errors_doc)]
 
+mod activity;
 mod config;
 mod error;
 mod retry;
 pub mod workflow_id;
 
+pub use activity::classify_error;
 pub use config::{Config, TlsConfig};
 pub use error::{BoxError, Error, Result};
 pub use retry::{RetryPolicy, RetryPolicyBuilder};
