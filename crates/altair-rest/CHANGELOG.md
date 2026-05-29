@@ -14,18 +14,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Cross-crate with_otel examples for retry/concurrent/rest/server ([#22](https://github.com/jasoet/altair-rs/pull/22))
-- Add focused runnable examples per crate (30 new) ([#16](https://github.com/jasoet/altair-rs/pull/16))
-
-## [0.1.2] - 2026-05-27
-
-
-### Documentation
-
-- Expand crate READMEs; feat(otel): re-export KeyValue ([#7](https://github.com/jasoet/altair-rs/pull/7))
-
-## [0.1.1] - 2026-05-27
-
-
-### Features
-
-- Fill gaps before v0.1.0 publish (otel shutdown/MeterProvider, retry+cancel, partial-results, coverage 90%) ([#4](https://github.com/jasoet/altair-rs/pull/4))
