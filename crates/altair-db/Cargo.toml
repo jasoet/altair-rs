@@ -1,0 +1,66 @@
+[package]
+name = "altair-db"
+description = "Sea-ORM + sqlx convenience layer with smart defaults, migrations, and OTel-aware tracing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["database", "sql", "sqlx", "sea-orm", "postgres"]
+categories = ["database"]
+
+[features]
+default = ["postgres", "mysql", "sqlite"]
+postgres = []
+mysql = []
+sqlite = []
+
+[dependencies]
+sea-orm = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+humantime-serde = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+anyhow = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }
+toml = { workspace = true }
+# Sibling crates for examples only.
+altair-otel = { path = "../altair-otel", version = "0.1" }
+altair-config = { path = "../altair-config", version = "0.1" }
+
+[[example]]
+name = "basic_orm"
+
+[[example]]
+name = "raw_sqlx"
+
+[[example]]
+name = "migrations"
+
+[[example]]
+name = "materialized_view"
+required-features = ["postgres"]
+
+[[example]]
+name = "with_config"
+
+[[example]]
+name = "transaction"
+
+[[example]]
+name = "with_otel"
+
+[lints]
+workspace = true
