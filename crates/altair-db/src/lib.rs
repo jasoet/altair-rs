@@ -2,8 +2,8 @@
 //!
 //! Wraps a `sea_orm::DatabaseConnection` (and its underlying sqlx pool) with
 //! smart pool defaults, file-based migrations, OTel-aware query tracing, and
-//! a closure-style transaction helper. Three backends (Postgres + MySQL +
-//! SQLite) are supported behind cargo features.
+//! a closure-style transaction helper. Three backends (Postgres + `MySQL` +
+//! `SQLite`) are supported behind cargo features.
 //!
 //! See the crate README for usage.
 
@@ -16,9 +16,13 @@
 mod error;
 mod config;
 mod connect;
+mod db;
 
 pub use error::{Error, Result};
 pub use config::{Backend, Config};
+pub use db::Db;
+
+pub mod prelude;
 
 // Re-exports for one-dep ergonomics
 pub use ::sea_orm;

@@ -4,10 +4,10 @@ use sea_orm::ConnectOptions;
 
 use crate::config::Config;
 
-/// Translate a `Config` into a `sea_orm::ConnectOptions`.
+/// Translate a [`Config`] into a `sea_orm::ConnectOptions`.
 ///
 /// Pure function — does not open a connection. Centralises the
-/// "every Config knob maps to the right ConnectOptions field" logic so it
+/// "every Config knob maps to the right `ConnectOptions` field" logic so it
 /// can be unit-tested without a live database.
 pub(crate) fn build_options(config: &Config) -> ConnectOptions {
     let mut opt = ConnectOptions::new(config.url.clone());
@@ -39,8 +39,8 @@ mod tests {
             max_connections: 25,
             min_connections: 3,
             acquire_timeout: Duration::from_secs(7),
-            idle_timeout: Some(Duration::from_secs(120)),
-            max_lifetime: Some(Duration::from_secs(900)),
+            idle_timeout: Some(Duration::from_mins(2)),
+            max_lifetime: Some(Duration::from_mins(15)),
             sqlx_logging: false,
             sqlx_slow_query_threshold: Duration::from_millis(250),
         }
@@ -63,8 +63,8 @@ mod tests {
     fn maps_timeouts() {
         let opts = build_options(&sample_config());
         assert_eq!(opts.get_acquire_timeout(), Some(Duration::from_secs(7)));
-        assert_eq!(opts.get_idle_timeout(), Some(Duration::from_secs(120)));
-        assert_eq!(opts.get_max_lifetime(), Some(Duration::from_secs(900)));
+        assert_eq!(opts.get_idle_timeout(), Some(Duration::from_mins(2)));
+        assert_eq!(opts.get_max_lifetime(), Some(Duration::from_mins(15)));
     }
 
     #[test]

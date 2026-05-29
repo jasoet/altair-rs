@@ -7,11 +7,11 @@ use crate::error::{Error, Result};
 /// Which database backend a `Config` refers to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
-    /// PostgreSQL.
+    /// `PostgreSQL`.
     Postgres,
-    /// MySQL / MariaDB.
+    /// `MySQL` / `MariaDB`.
     MySql,
-    /// SQLite.
+    /// `SQLite`.
     Sqlite,
 }
 
@@ -52,8 +52,8 @@ impl Default for Config {
             max_connections: 10,
             min_connections: 1,
             acquire_timeout: Duration::from_secs(30),
-            idle_timeout: Some(Duration::from_secs(600)),
-            max_lifetime: Some(Duration::from_secs(1800)),
+            idle_timeout: Some(Duration::from_mins(10)),
+            max_lifetime: Some(Duration::from_mins(30)),
             sqlx_logging: true,
             sqlx_slow_query_threshold: Duration::from_secs(1),
         }
@@ -80,8 +80,7 @@ impl Config {
         }
         let scheme = url
             .split_once(':')
-            .map(|(s, _)| s)
-            .unwrap_or(url)
+            .map_or(url, |(s, _)| s)
             .to_ascii_lowercase();
         match scheme.as_str() {
             "postgres" | "postgresql" => Ok(Backend::Postgres),
@@ -104,7 +103,7 @@ mod tests {
         assert_eq!(c.url, "postgres://localhost/x");
         assert_eq!(c.max_connections, 10);
         assert_eq!(c.acquire_timeout, Duration::from_secs(30));
-        assert_eq!(c.idle_timeout, Some(Duration::from_secs(600)));
+        assert_eq!(c.idle_timeout, Some(Duration::from_mins(10)));
     }
 
     #[test]
@@ -162,8 +161,8 @@ sqlx_slow_query_threshold = "750ms"
 "#;
         let cfg: Config = toml::from_str(toml_src).unwrap();
         assert_eq!(cfg.acquire_timeout, Duration::from_secs(45));
-        assert_eq!(cfg.idle_timeout, Some(Duration::from_secs(300)));
-        assert_eq!(cfg.max_lifetime, Some(Duration::from_secs(3600)));
+        assert_eq!(cfg.idle_timeout, Some(Duration::from_mins(5)));
+        assert_eq!(cfg.max_lifetime, Some(Duration::from_hours(1)));
         assert_eq!(
             cfg.sqlx_slow_query_threshold,
             Duration::from_millis(750)
