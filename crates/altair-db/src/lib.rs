@@ -13,6 +13,10 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::missing_errors_doc)]
 
+mod error;
+
+pub use error::{Error, Result};
+
 // Re-exports for one-dep ergonomics
 pub use ::sea_orm;
 pub use ::sqlx;
