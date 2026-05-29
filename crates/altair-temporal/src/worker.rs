@@ -98,8 +98,7 @@ impl WorkerBuilder {
 
         let max_cached = usize::try_from(self.config.max_concurrent_workflows)
             .unwrap_or(usize::MAX);
-        #[allow(clippy::cast_precision_loss)]
-        let max_activities_per_sec = self.config.max_concurrent_activities as f64;
+        let max_activities_per_sec = f64::from(self.config.max_concurrent_activities);
 
         let mut worker_opts = temporalio_sdk::WorkerOptions::new(self.config.task_queue.clone())
             .max_cached_workflows(max_cached)
@@ -135,7 +134,7 @@ impl Worker {
     ///
     /// Returns [`Error::Worker`] if the SDK worker exits with an error.
     pub async fn run(self) -> Result<()> {
-        self.run_with_shutdown(shutdown_signal()).await
+        Box::pin(self.run_with_shutdown(shutdown_signal())).await
     }
 
     /// Run until the given future resolves.
