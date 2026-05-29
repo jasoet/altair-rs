@@ -16,6 +16,7 @@
 mod config;
 mod error;
 mod retry;
+pub mod workflow_id;
 
 pub use config::{Config, TlsConfig};
 pub use error::{BoxError, Error, Result};
