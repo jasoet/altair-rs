@@ -13,6 +13,10 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::missing_errors_doc)]
 
+mod error;
+
+pub use error::{BoxError, Error, Result};
+
 // Underlying-lib re-exports
 pub use ::temporalio_sdk;
 pub use ::temporalio_sdk_core;
