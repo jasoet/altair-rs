@@ -9,6 +9,7 @@ members = [
     "crates/altair-compress",
     "crates/altair-rest",
     "crates/altair-server",
+    "crates/altair-db",
 ]
 
 [workspace.package]
@@ -72,6 +73,25 @@ axum = { version = "0.8", default-features = true }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "request-id", "timeout", "cors", "compression-full", "util"] }
 uuid = { version = "1", features = ["v4"] }
+
+# Database
+sea-orm = { version = "1", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "sqlx-postgres",
+    "sqlx-mysql",
+    "sqlx-sqlite",
+    "macros",
+] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "mysql",
+    "sqlite",
+    "migrate",
+] }
+humantime-serde = "1"
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["postgres", "mysql"] }
 
 # Retry
 backon = "1"
