@@ -15,6 +15,7 @@ Production-ready Rust utility crates for tokio applications. Each crate wraps a 
 | [`altair-rest`](crates/altair-rest) | Resilient HTTP client — reqwest + retry + tracing baked in | [![crate](https://img.shields.io/crates/v/altair-rest.svg)](https://crates.io/crates/altair-rest) |
 | [`altair-server`](crates/altair-server) | Axum + tower-http convenience layer with sensible defaults | [![crate](https://img.shields.io/crates/v/altair-server.svg)](https://crates.io/crates/altair-server) |
 | [`altair-db`](crates/altair-db) | Sea-ORM + sqlx convenience layer (Postgres / MySQL / SQLite) | [![crate](https://img.shields.io/crates/v/altair-db.svg)](https://crates.io/crates/altair-db) |
+| [`altair-temporal`](crates/altair-temporal) | Stable facade over pre-1.0 temporalio-* Rust SDK (typed Config, builders, OTel integration) | [![crate](https://img.shields.io/crates/v/altair-temporal.svg)](https://crates.io/crates/altair-temporal) |
 
 Pick one, several, or all four — each is usable standalone. Pair `altair-otel` with any of the others and tracing flows automatically (spans + metrics).
 

@@ -2,7 +2,7 @@
 
 Tracks the migration status of every package from [`github.com/jasoet/pkg`](https://github.com/jasoet/pkg) (Go) to its Rust equivalent in `altair-rs`.
 
-**Last updated:** 2026-05-29 (altair-db design + implementation in flight)
+**Last updated:** 2026-05-29 (altair-temporal design + implementation in flight)
 **Reference Go version:** v2.13.0
 
 ## Published crates
@@ -20,6 +20,7 @@ All crates live on crates.io:
 | [`altair-rest`](https://crates.io/crates/altair-rest) | 0.1.2 |
 | [`altair-server`](https://crates.io/crates/altair-server) | 0.1.2 (date TBD on publish) |
 | [`altair-db`](https://crates.io/crates/altair-db) | 0.1.x (TBD) |
+| [`altair-temporal`](https://crates.io/crates/altair-temporal) | 0.1.x (TBD) |
 
 **Release notes:**
 - **0.1.0** (2026-05-27) — initial release of starter scaffolding
@@ -30,9 +31,10 @@ All crates live on crates.io:
 - **`altair-rest` 0.1.2** (2026-05-28) — Resilient HTTP client built on `reqwest`. Built-in retries via `reqwest-retry` + tracing via `reqwest-tracing`. JSON helpers (`get_json`/`post_json`) for the 80% case.
 - **`altair-server` 0.1.2** (date TBD on publish) — Axum + tower-http convenience layer with default middleware (tracing + request-id + timeout), built-in `/health` endpoint, and SIGINT/SIGTERM-aware graceful shutdown.
 - **`altair-db` 0.1.x** (date TBD on publish) — Sea-ORM + sqlx convenience layer. Postgres + MySQL + SQLite, smart pool defaults, sqlx-migrate, OTel-aware query tracing, closure-style transactions.
+- **`altair-temporal` 0.1.x** (date TBD on publish) — Stable facade over pre-1.0 temporalio-* Rust SDK. Typed Config, Client/Worker builders, RetryPolicy + Schedule builders, classify_error, workflow_id encode/decode.
 
 Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
-`altair-grpc` (tonic).
+`altair-grpc` (tonic), `altair-ssh` (russh), `altair-docker` (testcontainers/bollard).
 
 ## Status Legend
 
@@ -57,6 +59,7 @@ Next milestone: depends on real-world need. Most likely candidates from `Awaitin
 | `rest` | `altair-rest` | ✅ Done | `reqwest`, `reqwest-middleware`, `reqwest-retry`, `reqwest-tracing` | Resilient HTTP client with retry + tracing baked in |
 | `server` | `altair-server` | ✅ Done | `axum`, `tower`, `tower-http` | Convenience layer with default middleware + health endpoint + graceful shutdown |
 | `db` | `altair-db` | ✅ Done | `sea-orm`, `sqlx` | Sea-ORM CRUD + raw sqlx (pool, migrations, transactions); Postgres + MySQL + SQLite |
+| `temporal` | `altair-temporal` | ✅ Done | `temporalio-sdk`, `temporalio-client` | Stable facade over pre-1.0 SDK; Config + builders + workflow_id helper |
 
 ## Awaiting Demand
 
@@ -72,7 +75,6 @@ These have clear Rust equivalents and will be added when a project needs them.
 
 | Go package | Likely Rust crate | Status | Concern | Notes |
 |---|---|---|---|---|
-| `temporal` | `altair-temporal` | 💤 Deferred | Rust SDK is pre-1.0 | Wait for `temporal-sdk-core` Rust crates to stabilize before porting |
 | `argo` | `altair-argo` | ❌ Won't Port (provisional) | No Rust Argo client | Would need to wrap `kube-rs` + raw Argo CRDs manually — large surface area for narrow use case; revisit if real need surfaces |
 
 ## Cross-Cutting Deferred Items

@@ -10,6 +10,7 @@ members = [
     "crates/altair-rest",
     "crates/altair-server",
     "crates/altair-db",
+    "crates/altair-temporal",
 ]
 
 [workspace.package]
@@ -93,6 +94,14 @@ sqlx = { version = "0.8", default-features = false, features = [
 humantime-serde = "1"
 testcontainers = "0.23"
 testcontainers-modules = { version = "0.11", features = ["postgres", "mysql"] }
+
+# Temporal
+temporalio-sdk = "~0.4"
+temporalio-sdk-core = "~0.4"
+temporalio-client = "~0.4"
+temporalio-common = "~0.4"
+temporalio-macros = "~0.4"
+prost-wkt-types = "0.7"
 
 # Retry
 backon = "1"

@@ -17,6 +17,12 @@ ignore = [
   # tokio-tar PAX header parsing. Only affects testcontainers' image-layer
   # parsing (trusted Docker registries), not runtime DB use.
   "RUSTSEC-2025-0111",
+  # backoff unmaintained. Pulled transitively by temporalio-sdk-core for
+  # rate-limited retries; no exploit, just archived. Replace when SDK migrates.
+  "RUSTSEC-2025-0012",
+  # instant unmaintained. Transitive dep of backoff and other crates;
+  # no exploit, archived in favour of web-time.
+  "RUSTSEC-2024-0384",
 ]
 
 [licenses]
