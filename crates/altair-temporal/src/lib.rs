@@ -15,9 +15,11 @@
 
 mod config;
 mod error;
+mod retry;
 
 pub use config::{Config, TlsConfig};
 pub use error::{BoxError, Error, Result};
+pub use retry::{RetryPolicy, RetryPolicyBuilder};
 
 // Underlying-lib re-exports
 pub use ::temporalio_sdk;
