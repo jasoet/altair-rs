@@ -1,0 +1,47 @@
+[package]
+name = "altair-temporal"
+description = "Stable facade over the pre-1.0 temporalio Rust SDK: typed Config, worker/client builders, retry + schedule builders, OTel-aware tracing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["temporal", "workflow", "activity", "async"]
+categories = ["asynchronous"]
+
+[features]
+default = ["tls"]
+tls = []
+integration-tests = []
+
+[dependencies]
+temporalio-sdk = { workspace = true }
+temporalio-sdk-core = { workspace = true }
+temporalio-client = { workspace = true }
+temporalio-common = { workspace = true }
+temporalio-macros = { workspace = true }
+prost-wkt-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+altair-base32 = { path = "../altair-base32", version = "0.1" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+anyhow = { workspace = true }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+toml = { workspace = true }
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }
+# Sibling crates for examples only.
+altair-otel = { path = "../altair-otel", version = "0.1" }
+altair-config = { path = "../altair-config", version = "0.1" }
+
+[lints]
+workspace = true
