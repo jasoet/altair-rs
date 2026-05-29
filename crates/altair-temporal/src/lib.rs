@@ -14,18 +14,22 @@
 #![allow(clippy::missing_errors_doc)]
 
 mod activity;
+mod client;
 mod config;
 mod error;
 pub mod prelude;
 mod retry;
 mod schedule;
+mod worker;
 pub mod workflow_id;
 
 pub use activity::classify_error;
+pub use client::Client;
 pub use config::{Config, TlsConfig};
 pub use error::{BoxError, Error, Result};
 pub use retry::{RetryPolicy, RetryPolicyBuilder};
 pub use schedule::{delete as delete_schedule, Schedule, ScheduleBuilder};
+pub use worker::{Worker, WorkerBuilder};
 
 // Underlying-lib re-exports
 pub use ::temporalio_sdk;
