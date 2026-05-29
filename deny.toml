@@ -5,7 +5,19 @@ all-features = true
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = []
+ignore = [
+  # RSA timing sidechannel (Marvin Attack). Pulled by sqlx-mysql for
+  # MySQL auth. No fix released upstream; the rsa crate has no
+  # constant-time alternative. Mitigation: deploy MySQL on a private
+  # network. Re-evaluate when rsa crate ships a patched release.
+  "RUSTSEC-2023-0071",
+  # rustls-pemfile unmaintained. Pulled transitively; no exploit, just
+  # archived repo. Replace when downstream deps migrate to rustls-pki-types.
+  "RUSTSEC-2025-0134",
+  # tokio-tar PAX header parsing. Only affects testcontainers' image-layer
+  # parsing (trusted Docker registries), not runtime DB use.
+  "RUSTSEC-2025-0111",
+]
 
 [licenses]
 allow = [
