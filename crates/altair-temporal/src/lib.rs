@@ -16,6 +16,7 @@
 mod activity;
 mod config;
 mod error;
+pub mod prelude;
 mod retry;
 pub mod workflow_id;
 
