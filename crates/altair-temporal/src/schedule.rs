@@ -252,9 +252,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_no_trigger() {
-        let s = Schedule::builder()
-            .start_workflow("W", "tq", "wid")
-            .build();
+        let s = Schedule::builder().start_workflow("W", "tq", "wid").build();
         let err = validate_schedule(&s).unwrap_err();
         assert!(matches!(err, Error::Configuration(_)));
     }

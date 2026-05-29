@@ -47,7 +47,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl Error {
     /// Construct a `Connect` error from a host and any boxable source.
     pub fn connect(host: impl Into<String>, source: impl Into<BoxError>) -> Self {
-        Self::Connect { host: host.into(), source: source.into() }
+        Self::Connect {
+            host: host.into(),
+            source: source.into(),
+        }
     }
 
     /// Construct a `Client` error from any boxable source.

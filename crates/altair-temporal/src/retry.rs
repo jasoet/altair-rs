@@ -7,9 +7,7 @@ use std::time::Duration;
 /// Constructed via [`RetryPolicy::builder`]; converted to the SDK type
 /// via [`RetryPolicy::into_inner`].
 #[derive(Debug, Clone)]
-pub struct RetryPolicy(
-    temporalio_common::protos::temporal::api::common::v1::RetryPolicy,
-);
+pub struct RetryPolicy(temporalio_common::protos::temporal::api::common::v1::RetryPolicy);
 
 impl RetryPolicy {
     /// Start building a retry policy.
@@ -20,9 +18,7 @@ impl RetryPolicy {
 
     /// Yield the underlying proto type for SDK calls.
     #[must_use]
-    pub fn into_inner(
-        self,
-    ) -> temporalio_common::protos::temporal::api::common::v1::RetryPolicy {
+    pub fn into_inner(self) -> temporalio_common::protos::temporal::api::common::v1::RetryPolicy {
         self.0
     }
 }
@@ -142,6 +138,9 @@ mod tests {
         let initial = p.initial_interval.expect("initial");
         assert_eq!(initial.seconds, 0);
         assert_eq!(initial.nanos, 500_000_000);
-        assert_eq!(p.non_retryable_error_types, vec!["AuthError", "ValidationError"]);
+        assert_eq!(
+            p.non_retryable_error_types,
+            vec!["AuthError", "ValidationError"]
+        );
     }
 }

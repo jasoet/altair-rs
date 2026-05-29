@@ -46,12 +46,13 @@ pub fn encode<T: serde::Serialize>(prefix: &str, payload: &T) -> Result<String> 
 /// * `Error::Configuration` if the ID has no `-`, the encoded segment
 ///   is not valid Crockford Base32, or the bytes do not deserialise as `T`.
 pub fn decode<T: serde::de::DeserializeOwned>(id: &str) -> Result<(String, T)> {
-    let (prefix, encoded) = id.rsplit_once('-').ok_or_else(|| {
-        Error::Configuration(format!("workflow id missing '-' separator: {id}"))
-    })?;
+    let (prefix, encoded) = id
+        .rsplit_once('-')
+        .ok_or_else(|| Error::Configuration(format!("workflow id missing '-' separator: {id}")))?;
     let bytes = altair_base32::decode(encoded)
         .map_err(|e| Error::Configuration(format!("workflow id base32 decode failed: {e}")))?;
-    let payload: T = serde_json::from_slice(&bytes)
-        .map_err(|e| Error::Configuration(format!("workflow id payload deserialise failed: {e}")))?;
+    let payload: T = serde_json::from_slice(&bytes).map_err(|e| {
+        Error::Configuration(format!("workflow id payload deserialise failed: {e}"))
+    })?;
     Ok((prefix.to_string(), payload))
 }

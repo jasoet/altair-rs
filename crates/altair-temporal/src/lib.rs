@@ -28,12 +28,12 @@ pub use client::Client;
 pub use config::{Config, TlsConfig};
 pub use error::{BoxError, Error, Result};
 pub use retry::{RetryPolicy, RetryPolicyBuilder};
-pub use schedule::{delete as delete_schedule, Schedule, ScheduleBuilder};
+pub use schedule::{Schedule, ScheduleBuilder, delete as delete_schedule};
 pub use worker::{Worker, WorkerBuilder};
 
 // Underlying-lib re-exports
-pub use ::temporalio_sdk;
-pub use ::temporalio_sdk_core;
 pub use ::temporalio_client;
 pub use ::temporalio_common;
 pub use ::temporalio_macros;
+pub use ::temporalio_sdk;
+pub use ::temporalio_sdk_core;

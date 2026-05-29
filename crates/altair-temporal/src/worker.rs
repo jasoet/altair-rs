@@ -96,8 +96,8 @@ impl WorkerBuilder {
         let runtime = CoreRuntime::new_assume_tokio(RuntimeOptions::default())
             .map_err(|e| Error::worker(format!("runtime init: {e:#}")))?;
 
-        let max_cached = usize::try_from(self.config.max_concurrent_workflows)
-            .unwrap_or(usize::MAX);
+        let max_cached =
+            usize::try_from(self.config.max_concurrent_workflows).unwrap_or(usize::MAX);
         let max_activities_per_sec = f64::from(self.config.max_concurrent_activities);
 
         let mut worker_opts = temporalio_sdk::WorkerOptions::new(self.config.task_queue.clone())

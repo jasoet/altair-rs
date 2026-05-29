@@ -73,16 +73,10 @@ fn build_tls(cfg: &TlsConfig) -> Result<TlsOptions> {
         (None, None) => None,
         (Some(cert_path), Some(key_path)) => {
             let cert = std::fs::read(cert_path).map_err(|e| {
-                Error::Configuration(format!(
-                    "read client_cert ({}): {e}",
-                    cert_path.display()
-                ))
+                Error::Configuration(format!("read client_cert ({}): {e}", cert_path.display()))
             })?;
             let key = std::fs::read(key_path).map_err(|e| {
-                Error::Configuration(format!(
-                    "read client_key ({}): {e}",
-                    key_path.display()
-                ))
+                Error::Configuration(format!("read client_key ({}): {e}", key_path.display()))
             })?;
             Some(ClientTlsOptions {
                 client_cert: cert,

@@ -97,7 +97,13 @@ server_name_override = "temporal.internal"
         assert_eq!(c.namespace, "archive");
         assert_eq!(c.max_concurrent_activities, 50);
         let tls = c.tls.expect("tls");
-        assert_eq!(tls.server_root_ca_cert.to_str().unwrap(), "/etc/temporal/ca.pem");
-        assert_eq!(tls.server_name_override.as_deref(), Some("temporal.internal"));
+        assert_eq!(
+            tls.server_root_ca_cert.to_str().unwrap(),
+            "/etc/temporal/ca.pem"
+        );
+        assert_eq!(
+            tls.server_name_override.as_deref(),
+            Some("temporal.internal")
+        );
     }
 }

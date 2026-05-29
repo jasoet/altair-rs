@@ -1,7 +1,7 @@
 //! Encode/decode round-trip + edge cases for `workflow_id`.
 
-use altair_temporal::workflow_id::{decode, encode, MAX_WORKFLOW_ID_LEN};
 use altair_temporal::Error;
+use altair_temporal::workflow_id::{MAX_WORKFLOW_ID_LEN, decode, encode};
 
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Payload {
