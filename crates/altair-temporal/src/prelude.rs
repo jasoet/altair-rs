@@ -2,6 +2,6 @@
 //! enough to write straightforward Temporal workflows and activities.
 
 pub use crate::{
-    classify_error, Config, Error, Result, RetryPolicy, RetryPolicyBuilder,
-    TlsConfig,
+    classify_error, delete_schedule, Client, Config, Error, Result, RetryPolicy,
+    RetryPolicyBuilder, Schedule, ScheduleBuilder, TlsConfig, Worker, WorkerBuilder,
 };
