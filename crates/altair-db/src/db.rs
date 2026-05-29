@@ -165,7 +165,9 @@ mod tests {
 
     #[tokio::test]
     async fn connect_to_sqlite_memory() {
-        let db = Db::connect(Config::from_url("sqlite::memory:")).await.unwrap();
+        let db = Db::connect(Config::from_url("sqlite::memory:"))
+            .await
+            .unwrap();
         assert_eq!(db.backend(), Backend::Sqlite);
         assert!(matches!(
             db.orm().get_database_backend(),
@@ -181,7 +183,9 @@ mod tests {
 
     #[tokio::test]
     async fn sqlite_pool_present_postgres_absent() {
-        let db = Db::connect(Config::from_url("sqlite::memory:")).await.unwrap();
+        let db = Db::connect(Config::from_url("sqlite::memory:"))
+            .await
+            .unwrap();
         assert!(db.sqlite_pool().is_some());
         #[cfg(feature = "postgres")]
         assert!(db.pg_pool().is_none());
@@ -191,27 +195,37 @@ mod tests {
 
     #[tokio::test]
     async fn ping_sqlite_memory() {
-        let db = Db::connect(Config::from_url("sqlite::memory:")).await.unwrap();
+        let db = Db::connect(Config::from_url("sqlite::memory:"))
+            .await
+            .unwrap();
         db.ping().await.unwrap();
     }
 
     #[tokio::test]
     async fn close_consumes_db() {
-        let db = Db::connect(Config::from_url("sqlite::memory:")).await.unwrap();
+        let db = Db::connect(Config::from_url("sqlite::memory:"))
+            .await
+            .unwrap();
         db.close().await.unwrap();
     }
 
     #[tokio::test]
     async fn migrate_applies_files() {
-        use std::io::Write;
         use sea_orm::{ConnectionTrait, Statement};
+        use std::io::Write;
 
         let dir = tempfile::tempdir().unwrap();
         let mut f = std::fs::File::create(dir.path().join("20260101000000_init.sql")).unwrap();
-        writeln!(f, "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT NOT NULL);").unwrap();
+        writeln!(
+            f,
+            "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT NOT NULL);"
+        )
+        .unwrap();
         drop(f);
 
-        let db = Db::connect(Config::from_url("sqlite::memory:")).await.unwrap();
+        let db = Db::connect(Config::from_url("sqlite::memory:"))
+            .await
+            .unwrap();
         db.migrate(dir.path()).await.unwrap();
 
         let stmt = Statement::from_string(
@@ -225,7 +239,9 @@ mod tests {
     async fn transaction_commit() {
         use sea_orm::{ConnectionTrait, Statement};
 
-        let db = Db::connect(Config::from_url("sqlite::memory:")).await.unwrap();
+        let db = Db::connect(Config::from_url("sqlite::memory:"))
+            .await
+            .unwrap();
         let backend = db.orm().get_database_backend();
         db.orm()
             .execute(Statement::from_string(
@@ -265,7 +281,9 @@ mod tests {
     async fn transaction_rollback_on_err() {
         use sea_orm::{ConnectionTrait, Statement};
 
-        let db = Db::connect(Config::from_url("sqlite::memory:")).await.unwrap();
+        let db = Db::connect(Config::from_url("sqlite::memory:"))
+            .await
+            .unwrap();
         let backend = db.orm().get_database_backend();
         db.orm()
             .execute(Statement::from_string(

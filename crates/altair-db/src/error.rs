@@ -35,9 +35,9 @@ mod tests {
 
     #[test]
     fn migration_from_sqlx_migrate_error() {
-        let raw = sqlx::migrate::MigrateError::Source(Box::<dyn std::error::Error + Send + Sync>::from(
-            "boom".to_string(),
-        ));
+        let raw = sqlx::migrate::MigrateError::Source(
+            Box::<dyn std::error::Error + Send + Sync>::from("boom".to_string()),
+        );
         let err: Error = raw.into();
         assert!(matches!(err, Error::Migration(_)));
     }

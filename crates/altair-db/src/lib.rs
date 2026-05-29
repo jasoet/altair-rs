@@ -13,14 +13,14 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::missing_errors_doc)]
 
-mod error;
 mod config;
 mod connect;
 mod db;
+mod error;
 
-pub use error::{Error, Result};
 pub use config::{Backend, Config};
 pub use db::Db;
+pub use error::{Error, Result};
 
 pub mod prelude;
 

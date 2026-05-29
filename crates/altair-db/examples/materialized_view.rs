@@ -40,10 +40,9 @@ async fn main() -> anyhow::Result<()> {
         .execute(pool)
         .await?;
 
-    let (n, total): (i64, String) =
-        sqlx::query_as("SELECT n, total::text FROM order_totals")
-            .fetch_one(pool)
-            .await?;
+    let (n, total): (i64, String) = sqlx::query_as("SELECT n, total::text FROM order_totals")
+        .fetch_one(pool)
+        .await?;
     println!("count={n} total={total}");
     Ok(())
 }

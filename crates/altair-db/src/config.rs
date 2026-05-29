@@ -163,9 +163,6 @@ sqlx_slow_query_threshold = "750ms"
         assert_eq!(cfg.acquire_timeout, Duration::from_secs(45));
         assert_eq!(cfg.idle_timeout, Some(Duration::from_mins(5)));
         assert_eq!(cfg.max_lifetime, Some(Duration::from_hours(1)));
-        assert_eq!(
-            cfg.sqlx_slow_query_threshold,
-            Duration::from_millis(750)
-        );
+        assert_eq!(cfg.sqlx_slow_query_threshold, Duration::from_millis(750));
     }
 }

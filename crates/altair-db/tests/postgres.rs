@@ -49,11 +49,10 @@ async fn materialized_view_round_trip_via_raw_sqlx() {
     .await
     .unwrap();
 
-    let (n, total): (i64, String) =
-        sqlx::query_as("SELECT n, total FROM order_totals")
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    let (n, total): (i64, String) = sqlx::query_as("SELECT n, total FROM order_totals")
+        .fetch_one(pool)
+        .await
+        .unwrap();
     assert_eq!(n, 3);
     assert_eq!(total, "60");
 }

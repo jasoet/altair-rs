@@ -12,7 +12,10 @@ use testcontainers_modules::mysql::Mysql;
 
 async fn start() -> (Db, testcontainers::ContainerAsync<Mysql>) {
     let container = Mysql::default().start().await.expect("start mysql");
-    let port = container.get_host_port_ipv4(3306).await.expect("mysql port");
+    let port = container
+        .get_host_port_ipv4(3306)
+        .await
+        .expect("mysql port");
     let url = format!("mysql://root@127.0.0.1:{port}/test");
     let db = Db::connect(Config::from_url(url)).await.expect("connect");
     (db, container)
