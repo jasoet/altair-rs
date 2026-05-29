@@ -14,8 +14,10 @@
 #![allow(clippy::missing_errors_doc)]
 
 mod error;
+mod config;
 
 pub use error::{Error, Result};
+pub use config::{Backend, Config};
 
 // Re-exports for one-dep ergonomics
 pub use ::sea_orm;
