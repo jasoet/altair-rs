@@ -6,6 +6,7 @@
 
 #![cfg(all(feature = "integration-tests", target_os = "linux"))]
 
+#[ignore = "scaffold pending SDK stabilisation; invoke with --ignored to run"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn worker_runs_a_workflow() {
     // TODO: spin up Temporal server via testcontainers, build a worker,
