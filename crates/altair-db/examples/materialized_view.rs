@@ -2,8 +2,8 @@
 //!
 //! Run with a Postgres URL on stdin:
 //!
-//!   DATABASE_URL=postgres://user:pass@host/db \
-//!     cargo run --example materialized_view -p altair-db --features postgres
+//!   `DATABASE_URL=postgres://user:pass@host/db` \
+//!     cargo run --example `materialized_view` -p altair-db --features postgres
 
 use altair_db::prelude::*;
 

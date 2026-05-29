@@ -1,4 +1,4 @@
-//! SeaORM CRUD round-trip against SQLite.
+//! `SeaORM` CRUD round-trip against `SQLite`.
 //!
 //! Run with: `cargo run --example basic_orm -p altair-db`
 

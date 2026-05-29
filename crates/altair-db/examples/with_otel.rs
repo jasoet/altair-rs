@@ -1,6 +1,6 @@
 //! Cross-crate auto-integration with `altair-otel`.
 //!
-//! `altair-db` enables SeaORM's `sqlx_logging`, which emits `tracing` events
+//! `altair-db` enables `SeaORM`'s `sqlx_logging`, which emits `tracing` events
 //! for every executed statement. Initialise `altair-otel` in the same process
 //! and those events flow through the configured exporter.
 //!
