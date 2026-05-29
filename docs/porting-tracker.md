@@ -2,7 +2,7 @@
 
 Tracks the migration status of every package from [`github.com/jasoet/pkg`](https://github.com/jasoet/pkg) (Go) to its Rust equivalent in `altair-rs`.
 
-**Last updated:** 2026-05-29 (altair-server 0.1.2 in flight)
+**Last updated:** 2026-05-29 (altair-db design + implementation in flight)
 **Reference Go version:** v2.13.0
 
 ## Published crates
@@ -19,6 +19,7 @@ All crates live on crates.io:
 | [`altair-compress`](https://crates.io/crates/altair-compress) | 0.1.2 |
 | [`altair-rest`](https://crates.io/crates/altair-rest) | 0.1.2 |
 | [`altair-server`](https://crates.io/crates/altair-server) | 0.1.2 (date TBD on publish) |
+| [`altair-db`](https://crates.io/crates/altair-db) | 0.1.x (TBD) |
 
 **Release notes:**
 - **0.1.0** (2026-05-27) — initial release of starter scaffolding
@@ -28,9 +29,10 @@ All crates live on crates.io:
 - **`altair-compress` 0.1.2** (2026-05-28) — Path-based recipes for gzip, tar, zip, and tar.gz with zip-slip protection. Re-exports `flate2`, `tar`, `zip` for power users.
 - **`altair-rest` 0.1.2** (2026-05-28) — Resilient HTTP client built on `reqwest`. Built-in retries via `reqwest-retry` + tracing via `reqwest-tracing`. JSON helpers (`get_json`/`post_json`) for the 80% case.
 - **`altair-server` 0.1.2** (date TBD on publish) — Axum + tower-http convenience layer with default middleware (tracing + request-id + timeout), built-in `/health` endpoint, and SIGINT/SIGTERM-aware graceful shutdown.
+- **`altair-db` 0.1.x** (date TBD on publish) — Sea-ORM + sqlx convenience layer. Postgres + MySQL + SQLite, smart pool defaults, sqlx-migrate, OTel-aware query tracing, closure-style transactions.
 
 Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
-`altair-db` (sqlx), `altair-grpc` (tonic).
+`altair-grpc` (tonic).
 
 ## Status Legend
 
@@ -54,6 +56,7 @@ Next milestone: depends on real-world need. Most likely candidates from `Awaitin
 | `compress` | `altair-compress` | ✅ Done | `flate2`, `tar`, `zip` | Path-based recipes with zip-slip protection |
 | `rest` | `altair-rest` | ✅ Done | `reqwest`, `reqwest-middleware`, `reqwest-retry`, `reqwest-tracing` | Resilient HTTP client with retry + tracing baked in |
 | `server` | `altair-server` | ✅ Done | `axum`, `tower`, `tower-http` | Convenience layer with default middleware + health endpoint + graceful shutdown |
+| `db` | `altair-db` | ✅ Done | `sea-orm`, `sqlx` | Sea-ORM CRUD + raw sqlx (pool, migrations, transactions); Postgres + MySQL + SQLite |
 
 ## Awaiting Demand
 
@@ -61,7 +64,6 @@ These have clear Rust equivalents and will be added when a project needs them.
 
 | Go package | Likely Rust crate | Status | Underlying libs | Notes |
 |---|---|---|---|---|
-| `db` | `altair-db` | 💤 Deferred | `sqlx` (or `sea-orm`) | Migrations via `sqlx-cli` or `refinery` |
 | `grpc` | `altair-grpc` | 💤 Deferred | `tonic`, `tower` | `tonic` = de-facto Rust gRPC |
 | `ssh` | `altair-ssh` | 💤 Deferred | `russh` | Async pure-Rust SSH |
 | `docker` | `altair-docker` | 💤 Deferred | `bollard`, `testcontainers` | `testcontainers-rs` is mature |
