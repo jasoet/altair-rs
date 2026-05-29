@@ -110,6 +110,7 @@ fn duration_to_proto(d: Duration) -> prost_wkt_types::Duration {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp, clippy::duration_suboptimal_units)]
 mod tests {
     use super::*;
 
