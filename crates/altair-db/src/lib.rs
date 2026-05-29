@@ -15,6 +15,7 @@
 
 mod error;
 mod config;
+mod connect;
 
 pub use error::{Error, Result};
 pub use config::{Backend, Config};
