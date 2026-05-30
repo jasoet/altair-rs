@@ -33,6 +33,26 @@ pub(crate) fn resolve(dest_root: &Path, entry_path: &Path) -> Result<PathBuf> {
     Ok(dest_root.join(entry_path))
 }
 
+/// Reject a symlink/hardlink target that escapes the destination root.
+///
+/// Symlinks in archives are particularly dangerous: a benign-looking entry
+/// like `dst/link` can target `/etc`, and a subsequent entry writing to
+/// `dst/link/passwd` lands at `/etc/passwd`. We treat the link target the
+/// same as an entry path — relative, no `..`, no absolute components.
+pub(crate) fn check_link_target(entry_path: &Path, link_target: &Path) -> Result<()> {
+    for component in link_target.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                return Err(Error::UnsafePath {
+                    path: entry_path.to_path_buf(),
+                });
+            }
+            Component::CurDir | Component::Normal(_) => {}
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

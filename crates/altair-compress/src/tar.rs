@@ -53,7 +53,27 @@ pub fn untar(archive: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()
         let mut entry = entry?;
         let entry_path = entry.path()?.into_owned();
         let safe_dest = safe_path::resolve(dest, &entry_path)?;
+        check_entry_links(&entry, &entry_path)?;
         entry.unpack(&safe_dest)?;
+    }
+    Ok(())
+}
+
+fn check_entry_links<R: std::io::Read>(
+    entry: &::tar::Entry<'_, R>,
+    entry_path: &Path,
+) -> Result<()> {
+    let header = entry.header();
+    if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
+        let link = header
+            .link_name()
+            .map_err(|_| Error::UnsafePath {
+                path: entry_path.to_path_buf(),
+            })?
+            .ok_or_else(|| Error::UnsafePath {
+                path: entry_path.to_path_buf(),
+            })?;
+        safe_path::check_link_target(entry_path, &link)?;
     }
     Ok(())
 }
@@ -108,6 +128,62 @@ mod tests {
                 assert!(reason.contains("not a directory"));
             }
             other => panic!("expected InvalidSource, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn untar_rejects_symlink_with_absolute_target() {
+        let work = TempDir::new().unwrap();
+        let archive = work.path().join("symlink.tar");
+
+        let mut header = ::tar::Header::new_ustar();
+        header.set_path("link").unwrap();
+        header.set_entry_type(::tar::EntryType::Symlink);
+        header.set_link_name("/etc").unwrap();
+        header.set_size(0);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_cksum();
+
+        {
+            let file = File::create(&archive).unwrap();
+            let mut builder = ::tar::Builder::new(file);
+            builder.append(&header, &[][..]).unwrap();
+            builder.finish().unwrap();
+        }
+
+        let restored = work.path().join("restored");
+        match untar(&archive, &restored) {
+            Err(Error::UnsafePath { .. }) => {}
+            other => panic!("expected UnsafePath, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn untar_rejects_symlink_with_parent_traversal() {
+        let work = TempDir::new().unwrap();
+        let archive = work.path().join("symlink.tar");
+
+        let mut header = ::tar::Header::new_ustar();
+        header.set_path("link").unwrap();
+        header.set_entry_type(::tar::EntryType::Symlink);
+        header.set_link_name("../escape").unwrap();
+        header.set_size(0);
+        header.set_mode(0o644);
+        header.set_mtime(0);
+        header.set_cksum();
+
+        {
+            let file = File::create(&archive).unwrap();
+            let mut builder = ::tar::Builder::new(file);
+            builder.append(&header, &[][..]).unwrap();
+            builder.finish().unwrap();
+        }
+
+        let restored = work.path().join("restored");
+        match untar(&archive, &restored) {
+            Err(Error::UnsafePath { .. }) => {}
+            other => panic!("expected UnsafePath, got {other:?}"),
         }
     }
 
