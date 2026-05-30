@@ -157,15 +157,27 @@ impl Worker {
 }
 
 /// Resolves when SIGINT or SIGTERM is received.
+///
+/// If SIGTERM cannot be registered (rare — would require tokio's signal
+/// machinery to be unavailable), the worker still shuts down on SIGINT.
 async fn shutdown_signal() {
     use tokio::signal::ctrl_c;
     #[cfg(unix)]
     {
         use tokio::signal::unix::{SignalKind, signal};
-        let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
-        tokio::select! {
-            _ = ctrl_c() => {},
-            _ = term.recv() => {},
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = ctrl_c() => {},
+                    _ = term.recv() => {},
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "failed to install SIGTERM handler ({e}); falling back to SIGINT only"
+                );
+                let _ = ctrl_c().await;
+            }
         }
     }
     #[cfg(not(unix))]
