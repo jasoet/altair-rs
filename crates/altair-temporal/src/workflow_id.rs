@@ -9,13 +9,25 @@
 //!
 //! # Limits
 //!
-//! Temporal workflow IDs cap at 200 bytes. Use this for small payloads
-//! only (IDs, short strings, a handful of fields). Larger payloads belong
-//! in activity input.
+//! This facade caps encoded workflow IDs at 200 bytes — a conservative
+//! safety margin well below the Temporal server's 1000-byte limit. Use
+//! this for small payloads only (IDs, short strings, a handful of fields).
+//! Larger payloads belong in activity input.
+//!
+//! # Determinism
+//!
+//! The encoded form is deterministic only if `serde_json::to_vec(payload)`
+//! is. Avoid `HashMap` and other unordered collections in the payload —
+//! their iteration order can differ between runs, producing different IDs
+//! for logically-identical payloads. Prefer structs with `#[derive(Serialize)]`
+//! or `BTreeMap` for stable ordering.
 
 use crate::error::{Error, Result};
 
-/// Temporal's workflow ID length limit, in bytes.
+/// Maximum encoded workflow ID length (bytes) enforced by this facade.
+///
+/// Set to 200 as a conservative safety margin; Temporal servers accept
+/// up to 1000.
 pub const MAX_WORKFLOW_ID_LEN: usize = 200;
 
 /// Encode `payload` into a workflow ID of the form `{prefix}-{base32}`.
@@ -49,6 +61,11 @@ pub fn decode<T: serde::de::DeserializeOwned>(id: &str) -> Result<(String, T)> {
     let (prefix, encoded) = id
         .rsplit_once('-')
         .ok_or_else(|| Error::Configuration(format!("workflow id missing '-' separator: {id}")))?;
+    if encoded.is_empty() {
+        return Err(Error::Configuration(format!(
+            "workflow id has empty encoded segment: {id}"
+        )));
+    }
     let bytes = altair_base32::decode(encoded)
         .map_err(|e| Error::Configuration(format!("workflow id base32 decode failed: {e}")))?;
     let payload: T = serde_json::from_slice(&bytes).map_err(|e| {
