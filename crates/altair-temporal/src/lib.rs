@@ -20,6 +20,8 @@ mod error;
 pub mod prelude;
 mod retry;
 mod schedule;
+#[cfg(feature = "testcontainers")]
+pub mod testcontainer;
 mod worker;
 pub mod workflow_id;
 
