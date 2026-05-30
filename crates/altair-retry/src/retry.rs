@@ -14,7 +14,11 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 /// On success, returns the value. On error, retries with exponential backoff.
 /// If `op` returns an error that downcasts to [`PermanentError`], retry stops
 /// immediately and the wrapped error is returned via [`Error::Permanent`].
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::too_many_lines
+)]
 pub async fn retry<T, E, F, Fut>(config: Config, mut op: F) -> Result<T>
 where
     F: FnMut() -> Fut + Send,
@@ -75,17 +79,20 @@ where
                 }
                 Err(e) => {
                     let boxed: BoxedError = e.into();
-                    if let Some(perm) = downcast_permanent(&boxed) {
-                        tracing::warn!(
-                            retry.outcome = "permanent",
-                            retry.attempts = attempt,
-                            "permanent error encountered",
-                        );
-                        return Err(Error::Permanent {
-                            name: config.name.clone(),
-                            source: perm,
-                        });
-                    }
+                    let boxed = match boxed.downcast::<PermanentError>() {
+                        Ok(perm) => {
+                            tracing::warn!(
+                                retry.outcome = "permanent",
+                                retry.attempts = attempt,
+                                "permanent error encountered",
+                            );
+                            return Err(Error::Permanent {
+                                name: config.name.clone(),
+                                source: perm.inner,
+                            });
+                        }
+                        Err(other) => other,
+                    };
 
                     if let Some(delay) = delays.next() {
                         tracing::debug!(
@@ -128,12 +135,6 @@ where
     }
     .instrument(span)
     .await
-}
-
-fn downcast_permanent(e: &BoxedError) -> Option<BoxedError> {
-    // PermanentError wraps an underlying error; unwrap so callers see the original
-    e.downcast_ref::<PermanentError>()
-        .map(|p| format!("{p}").into())
 }
 
 #[cfg(test)]
