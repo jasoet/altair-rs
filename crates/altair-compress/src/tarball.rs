@@ -57,7 +57,27 @@ pub fn untar_gz(archive: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result
         let mut entry = entry?;
         let entry_path = entry.path()?.into_owned();
         let safe_dest = safe_path::resolve(dest, &entry_path)?;
+        check_entry_links(&entry, &entry_path)?;
         entry.unpack(&safe_dest)?;
+    }
+    Ok(())
+}
+
+fn check_entry_links<R: std::io::Read>(
+    entry: &::tar::Entry<'_, R>,
+    entry_path: &Path,
+) -> Result<()> {
+    let header = entry.header();
+    if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
+        let link = header
+            .link_name()
+            .map_err(|_| Error::UnsafePath {
+                path: entry_path.to_path_buf(),
+            })?
+            .ok_or_else(|| Error::UnsafePath {
+                path: entry_path.to_path_buf(),
+            })?;
+        safe_path::check_link_target(entry_path, &link)?;
     }
     Ok(())
 }

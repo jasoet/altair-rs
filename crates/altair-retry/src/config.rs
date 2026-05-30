@@ -101,8 +101,25 @@ impl ConfigBuilder {
     }
 
     /// Finalize the config.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `multiplier` is non-finite or non-positive, or if
+    /// `initial_interval > max_interval`. These represent programming errors
+    /// that would yield nonsensical backoff schedules.
     #[must_use]
     pub fn build(self) -> Config {
+        assert!(
+            self.inner.multiplier.is_finite() && self.inner.multiplier > 0.0,
+            "retry multiplier must be finite and > 0.0, got {}",
+            self.inner.multiplier,
+        );
+        assert!(
+            self.inner.initial_interval <= self.inner.max_interval,
+            "retry initial_interval ({:?}) must be <= max_interval ({:?})",
+            self.inner.initial_interval,
+            self.inner.max_interval,
+        );
         self.inner
     }
 }
@@ -131,5 +148,26 @@ mod tests {
         assert_eq!(c.name, "test");
         assert_eq!(c.max_retries, 2);
         assert!(!c.jitter);
+    }
+
+    #[test]
+    #[should_panic(expected = "multiplier must be finite")]
+    fn build_panics_on_zero_multiplier() {
+        let _ = Config::builder().multiplier(0.0).build();
+    }
+
+    #[test]
+    #[should_panic(expected = "multiplier must be finite")]
+    fn build_panics_on_nan_multiplier() {
+        let _ = Config::builder().multiplier(f64::NAN).build();
+    }
+
+    #[test]
+    #[should_panic(expected = "initial_interval")]
+    fn build_panics_on_inverted_intervals() {
+        let _ = Config::builder()
+            .initial_interval(Duration::from_secs(10))
+            .max_interval(Duration::from_secs(1))
+            .build();
     }
 }
