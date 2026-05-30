@@ -33,6 +33,11 @@ tasks:
     cmds:
       - "{{.N}} cargo test --workspace --tests"
 
+  test:integration:temporal:
+    desc: Run altair-temporal integration tests against a real Temporal container (requires Docker)
+    cmds:
+      - "{{.N}} cargo test -p altair-temporal --features integration-tests --test integration -- --test-threads=1 --nocapture"
+
   test:doc:
     desc: Run doc tests
     cmds:

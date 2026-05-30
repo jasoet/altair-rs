@@ -15,7 +15,13 @@ categories = ["asynchronous"]
 [features]
 default = ["tls"]
 tls = []
-integration-tests = []
+# Public, reusable Temporal testcontainer fixture for downstream integration
+# tests. Enable in your own `[dev-dependencies]` to get
+# `altair_temporal::testcontainer::TemporalContainer`.
+testcontainers = ["dep:testcontainers"]
+# Run this crate's own integration tests against a real Temporal container.
+# Requires Docker. Always implies `testcontainers`.
+integration-tests = ["testcontainers"]
 
 [dependencies]
 temporalio-sdk = { workspace = true }
@@ -31,6 +37,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 altair-base32 = { path = "../altair-base32", version = "0.1" }
+# Optional: enabled by the `testcontainers` feature.
+testcontainers = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
@@ -40,6 +48,13 @@ tempfile = { workspace = true }
 toml = { workspace = true }
 testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true }
+# Required by the SDK's #[workflow] / #[activities] proc-macros, which
+# expand to `::futures::...` (activities) and `::futures_util::...`
+# (workflows). Both crates must be in the dependency graph or the macros
+# fail to resolve their paths.
+futures = { workspace = true }
+futures-util = "0.3"
+serde = { workspace = true }
 # Sibling crates for examples only.
 altair-otel = { path = "../altair-otel", version = "0.1" }
 altair-config = { path = "../altair-config", version = "0.1" }

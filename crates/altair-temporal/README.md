@@ -68,6 +68,61 @@ async fn main() -> anyhow::Result<()> {
 
 Run any: `cargo run -p altair-temporal --example <name>`.
 
+## Integration testing with `TemporalContainer`
+
+Spin up a real Temporal dev server in your own integration tests via the
+`testcontainers` feature:
+
+```toml
+[dev-dependencies]
+altair-temporal = { version = "0.1", features = ["testcontainers"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+# Required by the SDK's #[workflow] / #[activities] proc-macros
+futures = "0.3"
+futures-util = "0.3"
+```
+
+```rust
+use altair_temporal::testcontainer::TemporalContainer;
+use altair_temporal::{Client, WorkerBuilder};
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn my_worker_starts() {
+    let temporal = TemporalContainer::start().await.unwrap();
+    let cfg = temporal.config("my-task-queue");
+    let worker = WorkerBuilder::new(&cfg).build().await.unwrap();
+    drop(worker);
+}
+```
+
+The fixture pulls `temporalio/temporal:latest` and runs `server start-dev`
+(embedded SQLite, no external DB). Container starts in ~1 second once the
+image is cached; ~30 seconds on first pull. Drop the `TemporalContainer`
+handle to stop the container.
+
+Override the image, tag, namespace, or startup timeout via
+`TemporalContainer::builder()`. Use a shared `tokio::sync::OnceCell` to
+amortise the container across many tests in one file (be sure to give
+each test a unique task queue / workflow id).
+
+### Running this crate's own integration tests
+
+```bash
+task test:integration:temporal
+```
+
+Or directly:
+
+```bash
+cargo test -p altair-temporal --features integration-tests --test integration -- --test-threads=1 --nocapture
+```
+
+10 tests cover: client connect (success + unreachable), worker lifecycle
+(build, shutdown), schedule round-trips (create/delete, update), workflow
+execution (echo, workflow-plus-activity), retry policy
+(eventually-succeeds), and `workflow_id` encoded payload round-trip
+through a real workflow execution.
+
 ## Versioning
 
 altair-temporal pins `temporalio-* = "~0.4"`. When the SDK ships breaking changes (e.g. 0.5.0), altair-temporal bumps to its next major. Consumers stay on the previous altair-temporal major until they choose to migrate. The crate's `Error` type uses boxed source variants specifically so the wrapper's public API doesn't churn when SDK error types do.
