@@ -65,6 +65,12 @@ fn encode_rejects_overlong_payload() {
 }
 
 #[test]
+fn decode_rejects_empty_encoded_segment() {
+    let err = decode::<Payload>("archive-").unwrap_err();
+    assert!(matches!(err, Error::Configuration(_)));
+}
+
+#[test]
 fn boundary_max_id_len_passes() {
     let body_len = MAX_WORKFLOW_ID_LEN / 2;
     let payload = Payload {
