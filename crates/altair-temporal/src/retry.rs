@@ -85,9 +85,36 @@ impl RetryPolicyBuilder {
     }
 
     /// Finalise into a [`RetryPolicy`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of these invariants are violated, since they would
+    /// produce a policy the Temporal server will reject at runtime:
+    /// - `backoff_coefficient` must be finite and `> 0.0`
+    /// - `initial_interval` and `maximum_interval` must be non-zero
+    /// - `initial_interval <= maximum_interval`
     #[must_use]
     pub fn build(self) -> RetryPolicy {
         use temporalio_common::protos::temporal::api::common::v1::RetryPolicy as Proto;
+        assert!(
+            self.backoff_coefficient.is_finite() && self.backoff_coefficient > 0.0,
+            "backoff_coefficient must be finite and > 0.0, got {}",
+            self.backoff_coefficient,
+        );
+        assert!(
+            !self.initial_interval.is_zero(),
+            "initial_interval must be > 0",
+        );
+        assert!(
+            !self.maximum_interval.is_zero(),
+            "maximum_interval must be > 0",
+        );
+        assert!(
+            self.initial_interval <= self.maximum_interval,
+            "initial_interval ({:?}) must be <= maximum_interval ({:?})",
+            self.initial_interval,
+            self.maximum_interval,
+        );
         RetryPolicy(Proto {
             initial_interval: Some(duration_to_proto(self.initial_interval)),
             backoff_coefficient: self.backoff_coefficient,
@@ -120,6 +147,35 @@ mod tests {
         let max = p.maximum_interval.expect("maximum");
         assert_eq!(max.seconds, 30);
         assert!(p.non_retryable_error_types.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "backoff_coefficient must be finite")]
+    fn build_panics_on_nan_coefficient() {
+        let _ = RetryPolicy::builder().backoff_coefficient(f64::NAN).build();
+    }
+
+    #[test]
+    #[should_panic(expected = "backoff_coefficient must be finite")]
+    fn build_panics_on_zero_coefficient() {
+        let _ = RetryPolicy::builder().backoff_coefficient(0.0).build();
+    }
+
+    #[test]
+    #[should_panic(expected = "initial_interval must be > 0")]
+    fn build_panics_on_zero_initial() {
+        let _ = RetryPolicy::builder()
+            .initial_interval(Duration::ZERO)
+            .build();
+    }
+
+    #[test]
+    #[should_panic(expected = "must be <= maximum_interval")]
+    fn build_panics_on_inverted_intervals() {
+        let _ = RetryPolicy::builder()
+            .initial_interval(Duration::from_secs(60))
+            .maximum_interval(Duration::from_secs(1))
+            .build();
     }
 
     #[test]
