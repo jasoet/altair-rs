@@ -26,7 +26,18 @@ pub(crate) fn init(config: &Config) -> Result<()> {
 
     let tracer = tracer_provider.tracer("altair");
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = match EnvFilter::try_from_default_env() {
+        Ok(f) => f,
+        Err(e) => {
+            // RUST_LOG (or equivalent) was set but malformed. Emit to stderr
+            // since tracing isn't initialised yet — falling back silently
+            // hides config typos.
+            if std::env::var("RUST_LOG").is_ok() {
+                eprintln!("altair-otel: invalid RUST_LOG filter, defaulting to 'info': {e}");
+            }
+            EnvFilter::new("info")
+        }
+    };
 
     let registry = tracing_subscriber::registry()
         .with(env_filter)
