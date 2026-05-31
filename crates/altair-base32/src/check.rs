@@ -54,6 +54,37 @@ pub fn encode_with_check(data: &[u8]) -> String {
 /// - [`Error::InvalidChar`] if the body has any invalid character
 /// - [`Error::InvalidChar`] if the trailing check char isn't in the
 ///   extended alphabet
+///
+/// # Examples
+///
+/// Round-trip with [`encode_with_check`]:
+///
+/// ```
+/// use altair_base32::{decode_with_check, encode_with_check};
+///
+/// let original = b"hello";
+/// let encoded = encode_with_check(original);
+/// let decoded = decode_with_check(&encoded).unwrap();
+/// assert_eq!(decoded, original);
+/// ```
+///
+/// Detect a single-character corruption:
+///
+/// ```
+/// use altair_base32::{Error, decode_with_check, encode_with_check};
+///
+/// let encoded = encode_with_check(b"alpha");
+/// // Flip the first character of the body — check digit no longer matches.
+/// let mut corrupted = encoded.clone();
+/// let first = corrupted.remove(0);
+/// let replacement = if first == 'A' { 'B' } else { 'A' };
+/// corrupted.insert(0, replacement);
+///
+/// assert!(matches!(
+///     decode_with_check(&corrupted),
+///     Err(Error::CheckMismatch { .. })
+/// ));
+/// ```
 pub fn decode_with_check(text: &str) -> Result<Vec<u8>> {
     let Some((last_pos, found)) = text.char_indices().next_back() else {
         return Err(Error::Empty);
