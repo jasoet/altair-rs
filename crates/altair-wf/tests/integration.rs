@@ -884,3 +884,136 @@ async fn function_unknown_handler_fails_with_activity_error() {
         "expected workflow failure for unknown handler",
     );
 }
+
+#[workflow]
+#[derive(Default)]
+pub struct FunctionParallelWf;
+
+#[workflow_methods]
+impl FunctionParallelWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: ParallelInput<FunctionExecutionInput>,
+    ) -> WorkflowResult<ParallelOutput<FunctionExecutionOutput>> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let result = parallel(input, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(FunctionActivities::execute_function, step, opts)
+                    .await
+                    .map_err(|e| {
+                        altair_wf::Error::activity("FunctionActivities::execute_function", e)
+                    })
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+async fn build_function_parallel_worker(tq: &str) -> altair_temporal::Worker {
+    let temporal = temporal().await;
+    let cfg = temporal.config(tq);
+    WorkerBuilder::new(&cfg)
+        .register_workflow::<FunctionParallelWf>()
+        .register_activities(make_function_activities())
+        .build()
+        .await
+        .expect("build worker")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn function_pipeline_stop_on_error_fails_workflow_on_handler_unsuccessful_output() {
+    // Pins down the cross-feature contract: handler errors come back
+    // as `Ok(FunctionExecutionOutput { success: false, ... })`, but
+    // the pipeline pattern inspects `TaskOutput::is_success()`. With
+    // `stop_on_error: true`, an unsuccessful handler output therefore
+    // raises `Error::PatternStopped`, surfacing as a workflow failure
+    // (not a partial-result return).
+    let tq = unique("wf-fn-stop");
+    let worker = build_function_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("fn-stop-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let tasks = vec![
+            FunctionExecutionInput::new("upper").with_args([("text", "first")]),
+            FunctionExecutionInput::new("explode"),
+            FunctionExecutionInput::new("upper").with_args([("text", "never-runs")]),
+        ];
+        let input = PipelineInput {
+            tasks,
+            stop_on_error: true,
+            cleanup: false,
+        };
+        let handle = client
+            .start_workflow(
+                FunctionPipelineWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        let res: Result<PipelineOutput<FunctionExecutionOutput>, _> =
+            handle.get_result(WorkflowGetResultOptions::default()).await;
+        res
+    };
+
+    let res = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    let err = res.expect_err("expected workflow failure when handler reports unsuccessful output");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("kaboom"),
+        "expected PatternStopped to carry handler error: {msg}",
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn function_parallel_fail_fast_fails_workflow_on_handler_unsuccessful_output() {
+    // Same contract for the parallel pattern: an unsuccessful handler
+    // output under FailFast raises `PatternStopped` and the workflow
+    // fails. (Under FailureStrategy::Continue the failure would be
+    // recorded in `results` instead — that path is covered by
+    // function_handler_error_becomes_unsuccessful_output.)
+    let tq = unique("wf-fn-parallel-ff");
+    let worker = build_function_parallel_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("fn-parallel-ff-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let tasks = vec![
+            FunctionExecutionInput::new("upper").with_args([("text", "a")]),
+            FunctionExecutionInput::new("explode"),
+            FunctionExecutionInput::new("upper").with_args([("text", "c")]),
+        ];
+        let input = ParallelInput {
+            tasks,
+            failure_strategy: FailureStrategy::FailFast,
+        };
+        let handle = client
+            .start_workflow(
+                FunctionParallelWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        let res: Result<ParallelOutput<FunctionExecutionOutput>, _> =
+            handle.get_result(WorkflowGetResultOptions::default()).await;
+        res
+    };
+
+    let res = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    let err = res.expect_err("expected workflow failure under FailFast + handler error");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("kaboom"),
+        "expected PatternStopped to carry handler error: {msg}",
+    );
+}

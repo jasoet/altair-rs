@@ -87,7 +87,7 @@ impl FunctionActivities {
         let finished = started.elapsed();
         let finished_at_millis = unix_millis();
 
-        let mut out = match result {
+        let out = match result {
             Ok(Ok(output)) => FunctionExecutionOutput {
                 name: input.name.clone(),
                 success: true,
@@ -111,7 +111,7 @@ impl FunctionActivities {
             Err(panic) => FunctionExecutionOutput {
                 name: input.name.clone(),
                 success: false,
-                error: render_panic(&panic),
+                error: render_panic(&*panic),
                 result: std::collections::HashMap::new(),
                 data: Vec::new(),
                 duration: finished,
@@ -120,10 +120,6 @@ impl FunctionActivities {
             },
         };
 
-        // Keep the labels round-tripping for observability tools that
-        // might consume them downstream (the Go original drops them;
-        // we preserve symmetry by not touching them here either).
-        let _ = &mut out;
         Ok(out)
     }
 }
@@ -134,7 +130,7 @@ fn unix_millis() -> u64 {
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-fn render_panic(payload: &Box<dyn std::any::Any + Send>) -> String {
+fn render_panic(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(s) = payload.downcast_ref::<&'static str>() {
         format!("handler panicked: {s}")
     } else if let Some(s) = payload.downcast_ref::<String>() {
@@ -176,20 +172,20 @@ mod tests {
     fn render_panic_string_payload() {
         let s = "broken".to_string();
         let payload: Box<dyn std::any::Any + Send> = Box::new(s);
-        assert_eq!(render_panic(&payload), "handler panicked: broken");
+        assert_eq!(render_panic(&*payload), "handler panicked: broken");
     }
 
     #[test]
     fn render_panic_static_str_payload() {
         let payload: Box<dyn std::any::Any + Send> = Box::new("oops");
-        assert_eq!(render_panic(&payload), "handler panicked: oops");
+        assert_eq!(render_panic(&*payload), "handler panicked: oops");
     }
 
     #[test]
     fn render_panic_unknown_payload() {
         let payload: Box<dyn std::any::Any + Send> = Box::new(42i32);
         assert_eq!(
-            render_panic(&payload),
+            render_panic(&*payload),
             "handler panicked: <non-string payload>"
         );
     }

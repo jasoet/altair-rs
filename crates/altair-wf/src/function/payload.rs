@@ -9,8 +9,14 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::traits::{TaskInput, TaskOutput};
 
-/// Default activity name (`"ExecuteFunctionActivity"`). Matches the
-/// Go original so cross-language workflows interoperate.
+/// Default activity name (`"ExecuteFunctionActivity"`).
+///
+/// **Not used by the Rust activity** — the Temporal SDK's
+/// `#[activity]` macro derives the activity name from the method
+/// (`execute_function`). This constant is exposed so cross-language
+/// workflows (Go workers talking to Rust workers or vice versa) can
+/// agree on a single wire name when needed; explicitly pass it via
+/// the SDK's `name` attribute to override the default.
 pub const DEFAULT_FUNCTION_ACTIVITY_NAME: &str = "ExecuteFunctionActivity";
 
 // ---------------------------------------------------------------------------
@@ -111,7 +117,7 @@ pub struct FunctionExecutionInput {
     pub work_dir: String,
     /// Reserved for a future per-invocation timeout hint. Not enforced
     /// by the activity — set the timeout via `ActivityOptions` instead.
-    #[serde(default, with = "humantime_compat")]
+    #[serde(default, with = "duration_millis_compat")]
     pub timeout: Duration,
     /// Free-form metadata for traces / dashboards. Not consumed by the
     /// activity.
@@ -143,6 +149,56 @@ impl FunctionExecutionInput {
         self
     }
 
+    /// Replace `data` and return `self` for chaining.
+    #[must_use]
+    pub fn with_data(mut self, data: impl Into<Vec<u8>>) -> Self {
+        self.data = data.into();
+        self
+    }
+
+    /// Replace `env` and return `self` for chaining.
+    #[must_use]
+    pub fn with_env<I, K, V>(mut self, env: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.env = env.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+        self
+    }
+
+    /// Replace `work_dir` and return `self` for chaining.
+    #[must_use]
+    pub fn with_work_dir(mut self, work_dir: impl Into<String>) -> Self {
+        self.work_dir = work_dir.into();
+        self
+    }
+
+    /// Replace `timeout` and return `self` for chaining. The timeout is
+    /// metadata only — the activity itself does not enforce it; configure
+    /// the real cutoff via `ActivityOptions::start_to_close_timeout`.
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Replace `labels` and return `self` for chaining.
+    #[must_use]
+    pub fn with_labels<I, K, V>(mut self, labels: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.labels = labels
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect();
+        self
+    }
+
     /// Project to a [`FunctionInput`] for handler dispatch.
     #[must_use]
     pub fn to_function_input(&self) -> FunctionInput {
@@ -156,6 +212,11 @@ impl FunctionExecutionInput {
 }
 
 impl TaskInput for FunctionExecutionInput {
+    /// Only validates `name` — checks that it matches the Go original's
+    /// `^[a-zA-Z][a-zA-Z0-9_-]*$` pattern and is ≤255 bytes long. All
+    /// other fields (`args`, `data`, `env`, `work_dir`, `timeout`,
+    /// `labels`) are passed through to the handler unchecked; bound
+    /// them at the handler boundary if needed.
     fn validate(&self) -> Result<()> {
         if self.name.trim().is_empty() {
             return Err(Error::InvalidInput("function name is required".into()));
@@ -205,7 +266,7 @@ pub struct FunctionExecutionOutput {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub data: Vec<u8>,
     /// Wall-clock duration of the handler call (in millis on the wire).
-    #[serde(with = "humantime_compat")]
+    #[serde(with = "duration_millis_compat")]
     pub duration: Duration,
     /// Unix-millis when the handler started. Zero on the default
     /// instance.
@@ -253,7 +314,11 @@ impl TaskOutput for FunctionExecutionOutput {
     }
 }
 
-mod humantime_compat {
+/// Serde adapter that encodes [`Duration`] as `u64` millis on the wire.
+///
+/// Round-trips losslessly for any duration `< u64::MAX` millis (~584M
+/// years); larger durations saturate at `u64::MAX` on serialize.
+mod duration_millis_compat {
     use serde::{Deserialize, Deserializer, Serializer};
     use std::time::Duration;
 
@@ -319,5 +384,61 @@ mod tests {
         let f = FunctionExecutionOutput::failure("g", "boom");
         assert!(!f.is_success());
         assert_eq!(f.error(), Some("boom"));
+    }
+
+    #[test]
+    fn execution_input_accepts_255_byte_name_and_rejects_256() {
+        let ok = FunctionExecutionInput::new("a".repeat(255));
+        assert!(ok.validate().is_ok());
+        let too_long = FunctionExecutionInput::new("a".repeat(256));
+        assert!(matches!(too_long.validate(), Err(Error::InvalidInput(_))));
+    }
+
+    #[test]
+    fn execution_input_round_trips_through_serde() {
+        let original = FunctionExecutionInput::new("fn")
+            .with_args([("k", "v")])
+            .with_data(vec![1u8, 2, 3])
+            .with_env([("API_KEY", "x")])
+            .with_work_dir("/tmp")
+            .with_timeout(Duration::from_millis(1234))
+            .with_labels([("trace", "1")]);
+        let json = serde_json::to_string(&original).unwrap();
+        let back: FunctionExecutionInput = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.name, "fn");
+        assert_eq!(back.args.get("k").map(String::as_str), Some("v"));
+        assert_eq!(back.data, vec![1, 2, 3]);
+        assert_eq!(back.env.get("API_KEY").map(String::as_str), Some("x"));
+        assert_eq!(back.work_dir, "/tmp");
+        assert_eq!(back.timeout, Duration::from_millis(1234));
+        assert_eq!(back.labels.get("trace").map(String::as_str), Some("1"));
+    }
+
+    #[test]
+    fn execution_output_round_trips_through_serde_with_millis_duration() {
+        let out = FunctionExecutionOutput {
+            name: "fn".into(),
+            success: true,
+            error: String::new(),
+            result: HashMap::from([("k".into(), "v".into())]),
+            data: vec![9],
+            duration: Duration::from_millis(987),
+            started_at_millis: 1_000,
+            finished_at_millis: 1_987,
+        };
+        let value = serde_json::to_value(&out).unwrap();
+        // Duration is encoded as a bare millis u64 on the wire.
+        assert_eq!(
+            value.get("duration").and_then(serde_json::Value::as_u64),
+            Some(987)
+        );
+        let back: FunctionExecutionOutput = serde_json::from_value(value).unwrap();
+        assert_eq!(back.name, "fn");
+        assert!(back.success);
+        assert_eq!(back.duration, Duration::from_millis(987));
+        assert_eq!(back.started_at_millis, 1_000);
+        assert_eq!(back.finished_at_millis, 1_987);
+        assert_eq!(back.result.get("k").map(String::as_str), Some("v"));
+        assert_eq!(back.data, vec![9]);
     }
 }
