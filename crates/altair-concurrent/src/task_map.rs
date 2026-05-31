@@ -31,6 +31,13 @@ impl<T> TaskMap<T> {
     /// The closure receives the active [`CancellationToken`] and must return
     /// a future producing `Result<T, E>` where `E` can be boxed into a
     /// `std::error::Error`.
+    ///
+    /// # Duplicate names
+    ///
+    /// Backed by `BTreeMap::insert` — calling `insert` twice with the
+    /// same `name` **silently overwrites** the earlier task ("last write
+    /// wins"). If you need duplicate-name detection, check `.len()`
+    /// before/after the second insert or use distinct names.
     #[must_use]
     pub fn insert<F, Fut, E>(mut self, name: &'static str, task: F) -> Self
     where

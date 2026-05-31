@@ -35,4 +35,5 @@ pub use executor::{BoxedError, Executor, PartialExecutor, PartialResults, execut
 pub use task_map::TaskMap;
 
 // Re-exports for one-dep ergonomics
+pub use tokio::task::{JoinError, JoinSet};
 pub use tokio_util::sync::CancellationToken;

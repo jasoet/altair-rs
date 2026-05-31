@@ -28,14 +28,26 @@ impl<T> Executor<T>
 where
     T: Send + 'static,
 {
-    /// Attach a cancellation token. Cancelling it causes all tasks to abort.
+    /// Attach a cancellation token. Cancelling it requests all running
+    /// tasks to stop.
+    ///
+    /// # Cooperative cancellation
+    ///
+    /// Each task receives the token via the closure argument and is
+    /// responsible for `.cancelled().await`-ing it. Tasks that ignore
+    /// the token will not be interrupted — `JoinSet::shutdown` aborts
+    /// their `JoinHandle`s, but a CPU-bound task that never yields cannot
+    /// be preempted. Design tasks to check the token at await points.
     #[must_use]
     pub fn with_cancellation(mut self, token: CancellationToken) -> Self {
         self.cancellation = Some(token);
         self
     }
 
-    /// Apply an overall timeout. If the timeout elapses, remaining tasks are cancelled.
+    /// Apply an overall timeout. If the timeout elapses, [`Error::Timeout`]
+    /// is returned and the internal cancellation token is signalled so
+    /// remaining tasks observe cancellation. Tasks that ignore the token
+    /// continue running until they yield (see [`Self::with_cancellation`]).
     #[must_use]
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
