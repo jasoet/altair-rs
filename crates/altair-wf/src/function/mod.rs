@@ -37,8 +37,8 @@
 //!
 //! The Go original exposes `FunctionExecutionInput` / `FunctionExecutionOutput`
 //! as the activity payload — these are kept as separate, validated
-//! types in [`payload`], implementing [`crate::TaskInput`] /
-//! [`crate::TaskOutput`] so the patterns can drive them directly.
+//! types implementing [`crate::TaskInput`] / [`crate::TaskOutput`] so
+//! the patterns can drive them directly.
 
 mod activity;
 mod payload;
