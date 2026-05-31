@@ -38,6 +38,16 @@ tasks:
     cmds:
       - "{{.N}} cargo test -p altair-temporal --features integration-tests --test integration -- --test-threads=1 --nocapture"
 
+  test:integration:db:
+    desc: Run altair-db integration tests against real Postgres + MySQL containers (requires Docker)
+    cmds:
+      - "{{.N}} cargo test -p altair-db --tests --all-features -- --test-threads=1"
+
+  test:integration:otel:
+    desc: Run altair-otel integration tests against a real OTel collector container (requires Docker)
+    cmds:
+      - "{{.N}} cargo test -p altair-otel --features integration-tests --test exporter_otlp -- --nocapture"
+
   test:doc:
     desc: Run doc tests
     cmds:

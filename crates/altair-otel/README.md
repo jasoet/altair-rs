@@ -163,6 +163,49 @@ async fn main() -> anyhow::Result<()> {
 | `Error::AlreadyInitialized` | `init()` called more than once in the same process |
 | `Error::EnvConfig` | `from_env()` saw a missing/invalid required env var |
 
+## Integration testing with `OtelCollectorContainer`
+
+Spin up a real OpenTelemetry Collector in your own integration tests via
+the `testcontainers` feature:
+
+```toml
+[dev-dependencies]
+altair-otel = { version = "0.1", features = ["testcontainers"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+```rust
+use altair_otel::testcontainer::OtelCollectorContainer;
+use altair_otel::{Config, Exporter};
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn my_app_exports_traces() {
+    let collector = OtelCollectorContainer::start().await.unwrap();
+    let cfg = Config::builder()
+        .service_name("my-app")
+        .otlp_endpoint(collector.grpc_endpoint())
+        .exporter(Exporter::Otlp)
+        .build();
+    cfg.init().unwrap();
+
+    tracing::info!("hello collector");
+    altair_otel::shutdown();
+}
+```
+
+Pulls `otel/opentelemetry-collector:latest` (default config exposes OTLP
+gRPC on 4317 + HTTP on 4318). Container starts in ~1s with the image
+cached. Drop the `OtelCollectorContainer` handle to stop the container.
+
+Override the image, tag, or startup timeout via
+`OtelCollectorContainer::builder()`.
+
+Run this crate's own collector-backed integration test:
+
+```bash
+task test:integration:otel
+```
+
 ## License
 
 [MIT](../../LICENSE)

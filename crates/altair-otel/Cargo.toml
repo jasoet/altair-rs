@@ -17,6 +17,13 @@ default = ["otlp-grpc"]
 otlp-grpc = ["opentelemetry-otlp/grpc-tonic"]
 otlp-http = ["opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-client"]
 console = []
+# Public, reusable OTel collector testcontainer fixture for downstream
+# integration tests. Enable in your `[dev-dependencies]` to get
+# `altair_otel::testcontainer::OtelCollectorContainer`.
+testcontainers = ["dep:testcontainers"]
+# Run this crate's own integration tests against a real collector
+# container. Requires Docker. Always implies `testcontainers`.
+integration-tests = ["testcontainers"]
 
 [dependencies]
 tokio = { workspace = true }
@@ -29,6 +36,8 @@ opentelemetry-otlp = { workspace = true }
 opentelemetry-stdout = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true }
 thiserror = { workspace = true }
+# Optional: enabled by the `testcontainers` feature.
+testcontainers = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
