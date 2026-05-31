@@ -29,7 +29,7 @@
 //!     ]))
 //! })?;
 //!
-//! let out = reg.dispatch("greet", FunctionInput::with_args([("name", "world")])).await?;
+//! let out = reg.dispatch("greet", FunctionInput::new().with_args([("name", "world")])).await?;
 //! assert_eq!(out.result.get("msg").unwrap(), "hello world");
 //! # Ok(()) }
 //! # }

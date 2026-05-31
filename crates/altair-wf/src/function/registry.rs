@@ -158,7 +158,7 @@ mod tests {
         .unwrap();
 
         let out = reg
-            .dispatch("upper", FunctionInput::with_args([("text", "hi")]))
+            .dispatch("upper", FunctionInput::new().with_args([("text", "hi")]))
             .await
             .unwrap();
         assert_eq!(out.result.get("out").unwrap(), "HI");
