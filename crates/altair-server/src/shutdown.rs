@@ -9,6 +9,14 @@ use tokio::signal;
 /// orchestration, or rely on [`crate::Server::run`] which installs this
 /// automatically.
 ///
+/// # Degraded SIGTERM
+///
+/// If `signal::unix::signal(SignalKind::terminate())` fails (rare —
+/// requires tokio's signal machinery to be unavailable), the SIGTERM
+/// branch is replaced with a never-resolving future. The server still
+/// shuts down on SIGINT, but SIGTERM will be ignored. A warning is
+/// logged via `tracing::warn!`.
+///
 /// ```no_run
 /// # async fn run() {
 /// altair_server::shutdown_signal().await;

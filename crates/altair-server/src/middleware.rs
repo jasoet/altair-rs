@@ -7,7 +7,8 @@
 //! 3. `PropagateRequestIdLayer::x_request_id()` — echo ID in response
 //! 4. `CorsLayer` (if enabled)
 //! 5. `CompressionLayer` (if enabled)
-//! 6. `TimeoutLayer::new(timeout)` — request deadline
+//! 6. `RequestBodyLimitLayer` — reject oversized bodies
+//! 7. `TimeoutLayer::new(timeout)` — request deadline
 //!
 //! User-added layers via `with_middleware` are applied innermost-of-stack
 //! (closest to the handler), which gives them visibility into the
@@ -18,6 +19,7 @@ use axum::http::StatusCode;
 use std::time::Duration;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
@@ -27,6 +29,7 @@ pub(crate) struct DefaultStack {
     pub tracing: bool,
     pub request_id: bool,
     pub timeout: Duration,
+    pub body_limit: usize,
     pub cors: Option<CorsLayer>,
     pub compression: bool,
 }
@@ -44,6 +47,8 @@ impl DefaultStack {
             StatusCode::REQUEST_TIMEOUT,
             self.timeout,
         ));
+
+        router = router.layer(RequestBodyLimitLayer::new(self.body_limit));
 
         if self.compression {
             router = router.layer(CompressionLayer::new());
@@ -86,6 +91,7 @@ mod tests {
             tracing: true,
             request_id: true,
             timeout: Duration::from_secs(5),
+            body_limit: 2 * 1024 * 1024,
             cors: None,
             compression: false,
         };
@@ -104,6 +110,7 @@ mod tests {
             tracing: false,
             request_id: false,
             timeout: Duration::from_secs(5),
+            body_limit: 2 * 1024 * 1024,
             cors: None,
             compression: false,
         };
@@ -122,6 +129,7 @@ mod tests {
             tracing: false,
             request_id: false,
             timeout: Duration::from_millis(20),
+            body_limit: 2 * 1024 * 1024,
             cors: None,
             compression: false,
         };

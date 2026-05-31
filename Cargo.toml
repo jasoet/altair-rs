@@ -72,7 +72,7 @@ wiremock = "0.6"
 # HTTP server
 axum = { version = "0.8", default-features = true }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "request-id", "timeout", "cors", "compression-full", "util"] }
+tower-http = { version = "0.6", features = ["trace", "request-id", "timeout", "cors", "compression-full", "limit", "util"] }
 uuid = { version = "1", features = ["v4"] }
 
 # Database

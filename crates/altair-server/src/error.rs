@@ -22,6 +22,11 @@ pub enum Error {
     /// Builder rejected a configuration value (bad bind address, etc.).
     #[error("server configuration: {0}")]
     Configuration(String),
+
+    /// In-flight requests did not drain within the configured
+    /// `shutdown_timeout` after the shutdown future resolved.
+    #[error("graceful shutdown timed out after {0:?}")]
+    ShutdownTimeout(std::time::Duration),
 }
 
 /// Convenience result alias for this crate.
