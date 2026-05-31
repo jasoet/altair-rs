@@ -48,3 +48,12 @@ pub use crate::{
     execute_with_timeout, generate_parameter_combinations, parallel, parameterized_loop, pipeline,
     run_dag, run_loop, substitute_template, substitutor_from_fn,
 };
+
+// Mirror lib.rs's altair-temporal facade re-exports so a single
+// `use altair_wf::prelude::*;` (in a module that does NOT also host
+// the SDK macros — see the footgun warning above) gives consumers
+// everything they need to define and run a workflow.
+pub use crate::{
+    ActivityContext, ActivityError, ActivityOptions, Client, Config, RetryPolicy, Worker,
+    WorkerBuilder, WorkflowContext, WorkflowResult,
+};

@@ -25,6 +25,13 @@ pub enum Error {
 
     /// The underlying activity invocation failed at the SDK boundary
     /// (network error, activity panic, timeout, retry exhaustion).
+    ///
+    /// The `source` field may carry an `ActivityExecutionError` from
+    /// the Temporal SDK that contains application-error details (and,
+    /// depending on the activity, payload fragments). Sanitise before
+    /// emitting to external observability sinks if that's a concern.
+    /// Prefer the [`Self::activity`] constructor over the struct
+    /// literal — it handles the `Box::new(...)` for you.
     #[error("activity '{activity}' failed: {source}")]
     Activity {
         /// The activity name as it appears in Temporal.
@@ -32,6 +39,34 @@ pub enum Error {
         /// Underlying SDK error.
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+}
+
+impl Error {
+    /// Build an [`Error::Activity`] without the `Box::new(...)` /
+    /// `.into()` ceremony at every call site. Most workflows wrap
+    /// their `start_activity(...).await.map_err(...)` chain in
+    /// `Error::activity("MyActivities::method", e)` — without this
+    /// helper the construction is verbose enough to be transcription-
+    /// error prone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use altair_wf::Error;
+    /// let io = std::io::Error::other("network");
+    /// let err = Error::activity("MyActivities::ping", io);
+    /// assert!(matches!(err, Error::Activity { .. }));
+    /// ```
+    #[must_use]
+    pub fn activity<E>(name: impl Into<String>, source: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::Activity {
+            activity: name.into(),
+            source: Box::new(source),
+        }
+    }
 }
 
 /// Convenience result alias for this crate.

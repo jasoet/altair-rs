@@ -35,8 +35,10 @@ use altair_temporal::temporalio_sdk::{
 };
 use altair_temporal::testcontainer::TemporalContainer;
 use altair_wf::{
-    DAGInput, DAGNode, DAGOutput, FailureStrategy, ParallelInput, ParallelOutput, PipelineInput,
-    PipelineOutput, TaskInput, TaskOutput, default_activity_options, parallel, pipeline, run_dag,
+    DAGInput, DAGNode, DAGOutput, FailureStrategy, LoopInput, LoopOutput, ParallelInput,
+    ParallelOutput, ParameterizedLoopInput, PipelineInput, PipelineOutput, Substitutor, TaskInput,
+    TaskOutput, default_activity_options, execute, parallel, parameterized_loop, pipeline, run_dag,
+    run_loop, substitutor_from_fn,
 };
 #[allow(unused_imports)]
 use futures::FutureExt as _;
@@ -174,10 +176,7 @@ impl PipelineWf {
                 ctx_ref
                     .start_activity(EchoActivities::echo, step, opts)
                     .await
-                    .map_err(|e| altair_wf::Error::Activity {
-                        activity: "EchoActivities::echo".into(),
-                        source: Box::new(e),
-                    })
+                    .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
@@ -205,10 +204,7 @@ impl ParallelWf {
                 ctx_ref
                     .start_activity(EchoActivities::echo, step, opts)
                     .await
-                    .map_err(|e| altair_wf::Error::Activity {
-                        activity: "EchoActivities::echo".into(),
-                        source: Box::new(e),
-                    })
+                    .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
@@ -236,10 +232,105 @@ impl DAGWf {
                 ctx_ref
                     .start_activity(EchoActivities::echo, step, opts)
                     .await
-                    .map_err(|e| altair_wf::Error::Activity {
-                        activity: "EchoActivities::echo".into(),
-                        source: Box::new(e),
-                    })
+                    .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+#[workflow]
+#[derive(Default)]
+pub struct ExecuteWf;
+
+#[workflow_methods]
+impl ExecuteWf {
+    #[run]
+    pub async fn run(ctx: &mut WorkflowContext<Self>, input: EchoIn) -> WorkflowResult<EchoOut> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let result = execute(input, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(EchoActivities::echo, step, opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+#[workflow]
+#[derive(Default)]
+pub struct LoopWf;
+
+#[workflow_methods]
+impl LoopWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: LoopInput<EchoIn>,
+    ) -> WorkflowResult<LoopOutput<EchoOut>> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let substitutor: Substitutor<EchoIn> = substitutor_from_fn(
+            |template: &EchoIn, item: &str, idx: usize, _params| EchoIn {
+                id: template.id + u32::try_from(idx).unwrap_or(0),
+                msg: format!("{}-{item}", template.msg),
+                will_fail: template.will_fail,
+            },
+        );
+        let result = run_loop(input, substitutor, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(EchoActivities::echo, step, opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+#[workflow]
+#[derive(Default)]
+pub struct ParameterizedLoopWf;
+
+#[workflow_methods]
+impl ParameterizedLoopWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: ParameterizedLoopInput<EchoIn>,
+    ) -> WorkflowResult<LoopOutput<EchoOut>> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let substitutor: Substitutor<EchoIn> =
+            substitutor_from_fn(|template: &EchoIn, _item: &str, idx: usize, params| {
+                let region = params.get("region").cloned().unwrap_or_default();
+                let tier = params.get("tier").cloned().unwrap_or_default();
+                EchoIn {
+                    id: template.id + u32::try_from(idx).unwrap_or(0),
+                    msg: format!("{region}-{tier}"),
+                    will_fail: template.will_fail,
+                }
+            });
+        let result = parameterized_loop(input, substitutor, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(EchoActivities::echo, step, opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
@@ -274,6 +365,9 @@ async fn build_worker(tq: &str) -> altair_temporal::Worker {
         .register_workflow::<PipelineWf>()
         .register_workflow::<ParallelWf>()
         .register_workflow::<DAGWf>()
+        .register_workflow::<ExecuteWf>()
+        .register_workflow::<LoopWf>()
+        .register_workflow::<ParameterizedLoopWf>()
         .register_activities(EchoActivities)
         .build()
         .await
@@ -473,4 +567,115 @@ async fn parallel_fail_fast_returns_workflow_failure() {
 
     let res = run_with_workload(worker, workload, Duration::from_secs(60)).await;
     assert!(res.is_err(), "expected workflow failure under fail-fast");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn execute_single_task_round_trip() {
+    let tq = unique("wf-execute");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("execute-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let handle = client
+            .start_workflow(
+                ExecuteWf::run,
+                ok(42),
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: EchoOut = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.id, 42);
+    assert!(out.ok);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn run_loop_iterates_over_items() {
+    let tq = unique("wf-loop");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("loop-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let input = LoopInput {
+            items: vec!["us".into(), "eu".into(), "ap".into()],
+            template: ok(100),
+            parallel: false,
+            failure_strategy: FailureStrategy::Continue,
+        };
+        let handle = client
+            .start_workflow(
+                LoopWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: LoopOutput<EchoOut> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.item_count, 3);
+    assert_eq!(out.total_success, 3);
+    assert_eq!(out.total_failed, 0);
+    assert_eq!(out.results.len(), 3);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn parameterized_loop_cartesian_product_round_trip() {
+    let tq = unique("wf-param-loop");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("param-loop-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let mut params = std::collections::HashMap::new();
+        params.insert(
+            "region".to_string(),
+            vec!["us-east-1".into(), "eu-west-1".into()],
+        );
+        params.insert(
+            "tier".to_string(),
+            vec!["std".into(), "premium".into(), "enterprise".into()],
+        );
+        let input = ParameterizedLoopInput {
+            parameters: params,
+            template: ok(200),
+            parallel: false,
+            failure_strategy: FailureStrategy::Continue,
+        };
+        let handle = client
+            .start_workflow(
+                ParameterizedLoopWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: LoopOutput<EchoOut> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    // 2 regions × 3 tiers = 6 combinations.
+    assert_eq!(out.item_count, 6);
+    assert_eq!(out.total_success, 6);
+    assert_eq!(out.results.len(), 6);
 }

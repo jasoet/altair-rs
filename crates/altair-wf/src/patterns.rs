@@ -309,6 +309,15 @@ where
 /// Takes `Fn` like [`parallel`]; capture via interior mutability if
 /// needed.
 ///
+/// # Substitutor panics
+///
+/// The substitutor is called synchronously during input expansion. If
+/// it panics, the panic propagates up through this function and (when
+/// invoked from a `#[workflow_methods]` `#[run]` body) crashes the
+/// workflow execution, corrupting Temporal's event history.
+/// Substitutors should be infallible — encode any failure path in the
+/// returned `TaskInput`'s `validate()` impl instead.
+///
 /// # Examples
 ///
 /// ```no_run
@@ -381,6 +390,11 @@ where
 /// lexicographically before the product is expanded) so the same
 /// `ParameterizedLoopInput` produces the same activity dispatch order
 /// on every Temporal workflow replay.
+///
+/// # Substitutor panics
+///
+/// See [`run_loop`] — substitutor panics propagate and crash the
+/// workflow. Keep substitutors infallible.
 ///
 /// # Examples
 ///
@@ -570,14 +584,22 @@ where
             .iter()
             .map(|&idx| (nodes[idx].name.clone(), nodes[idx].input.clone()))
             .collect();
-        let futures = layer_inputs
-            .iter()
-            .map(|(_, i)| execute_one(i.clone()))
-            .collect::<Vec<_>>();
-        let outcomes = join_all(futures).await;
+        // Wrap each future so it records its own elapsed time. Without
+        // this, `node_start` would be captured AFTER `join_all`
+        // completes and every `duration` would be a near-zero
+        // post-processing measurement.
+        let futures = layer_inputs.iter().map(|(_, i)| {
+            let i = i.clone();
+            let started = Instant::now();
+            let fut = execute_one(i);
+            async move {
+                let outcome = fut.await;
+                (outcome, started.elapsed())
+            }
+        });
+        let outcomes: Vec<(Result<O>, std::time::Duration)> = join_all(futures).await;
 
-        for ((name, _input), outcome) in layer_inputs.into_iter().zip(outcomes) {
-            let node_start = Instant::now();
+        for ((name, _input), (outcome, duration)) in layer_inputs.into_iter().zip(outcomes) {
             match outcome {
                 Ok(out) => {
                     let success = out.is_success();
@@ -590,7 +612,7 @@ where
                             name,
                             result: Some(cloned),
                             error: None,
-                            duration: node_start.elapsed(),
+                            duration,
                             success: true,
                         });
                     } else {
@@ -599,7 +621,7 @@ where
                             name: name.clone(),
                             result: Some(cloned),
                             error: err_msg.clone(),
-                            duration: node_start.elapsed(),
+                            duration,
                             success: false,
                         });
                         if input.fail_fast {
@@ -617,7 +639,7 @@ where
                         name: name.clone(),
                         result: None,
                         error: Some(msg.clone()),
-                        duration: node_start.elapsed(),
+                        duration,
                         success: false,
                     });
                     if input.fail_fast {
