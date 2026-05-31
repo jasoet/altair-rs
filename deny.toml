@@ -48,6 +48,13 @@ confidence-threshold = 0.9
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Permit wildcard versions for path-only dependencies. We deliberately
+# strip version pins from sibling altair-* dev-deps (see release-plz.toml
+# and the per-crate Cargo.toml comments) so cargo publish can sequence
+# the workspace through a major-bump without the chicken-and-egg
+# resolution failure. Those path-only deps are stripped at publish time
+# anyway — never reach crates.io with a wildcard.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
