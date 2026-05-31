@@ -46,6 +46,8 @@
 
 mod dag;
 mod error;
+#[cfg(feature = "function")]
+pub mod function;
 mod helpers;
 mod patterns;
 mod traits;

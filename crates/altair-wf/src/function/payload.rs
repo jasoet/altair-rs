@@ -1,0 +1,323 @@
+//! Payload types: handler input/output + Temporal activity
+//! input/output.
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
+use crate::traits::{TaskInput, TaskOutput};
+
+/// Default activity name (`"ExecuteFunctionActivity"`). Matches the
+/// Go original so cross-language workflows interoperate.
+pub const DEFAULT_FUNCTION_ACTIVITY_NAME: &str = "ExecuteFunctionActivity";
+
+// ---------------------------------------------------------------------------
+// Handler-side payloads
+// ---------------------------------------------------------------------------
+
+/// Input passed to a registered handler. All fields are optional —
+/// callers wire only what they need.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FunctionInput {
+    /// Named scalar arguments.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub args: HashMap<String, String>,
+    /// Bulk binary payload (e.g. uploaded file).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data: Vec<u8>,
+    /// Environment-variable-style key/values.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env: HashMap<String, String>,
+    /// Working directory hint.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub work_dir: String,
+}
+
+impl FunctionInput {
+    /// Convenience: build a `FunctionInput` from an iterator of
+    /// `(name, value)` argument pairs.
+    pub fn with_args<I, K, V>(args: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        Self {
+            args: args
+                .into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect(),
+            ..Self::default()
+        }
+    }
+}
+
+/// Output returned by a registered handler.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FunctionOutput {
+    /// Named scalar results.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub result: HashMap<String, String>,
+    /// Bulk binary payload (e.g. generated file).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data: Vec<u8>,
+}
+
+impl FunctionOutput {
+    /// Convenience: build a `FunctionOutput` from an iterator of
+    /// `(name, value)` result pairs.
+    pub fn with_result<I, K, V>(result: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        Self {
+            result: result
+                .into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect(),
+            ..Self::default()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Activity-side payloads (impl TaskInput / TaskOutput so patterns can drive them)
+// ---------------------------------------------------------------------------
+
+/// Activity payload — names the handler to dispatch and carries all the
+/// fields the handler will see, plus a few activity-level options.
+///
+/// Implements [`crate::TaskInput`] so the workflow patterns
+/// (`pipeline`, `parallel`, `run_loop`, …) can drive these directly.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FunctionExecutionInput {
+    /// Name of the registered handler to invoke.
+    pub name: String,
+    /// Forwarded as `FunctionInput::args`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub args: HashMap<String, String>,
+    /// Forwarded as `FunctionInput::data`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data: Vec<u8>,
+    /// Forwarded as `FunctionInput::env`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env: HashMap<String, String>,
+    /// Forwarded as `FunctionInput::work_dir`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub work_dir: String,
+    /// Reserved for a future per-invocation timeout hint. Not enforced
+    /// by the activity — set the timeout via `ActivityOptions` instead.
+    #[serde(default, with = "humantime_compat")]
+    pub timeout: Duration,
+    /// Free-form metadata for traces / dashboards. Not consumed by the
+    /// activity.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub labels: HashMap<String, String>,
+}
+
+impl FunctionExecutionInput {
+    /// Helper: build an input from a handler name + arg map.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            ..Self::default()
+        }
+    }
+
+    /// Replace `args` and return `self` for chaining.
+    #[must_use]
+    pub fn with_args<I, K, V>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.args = args
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect();
+        self
+    }
+
+    /// Project to a [`FunctionInput`] for handler dispatch.
+    #[must_use]
+    pub fn to_function_input(&self) -> FunctionInput {
+        FunctionInput {
+            args: self.args.clone(),
+            data: self.data.clone(),
+            env: self.env.clone(),
+            work_dir: self.work_dir.clone(),
+        }
+    }
+}
+
+impl TaskInput for FunctionExecutionInput {
+    fn validate(&self) -> Result<()> {
+        if self.name.trim().is_empty() {
+            return Err(Error::InvalidInput("function name is required".into()));
+        }
+        // Match the Go original's regex `^[a-zA-Z][a-zA-Z0-9_-]*$` so
+        // names are safe to embed in event-history / metrics / logs.
+        let mut chars = self.name.chars();
+        let first = chars.next().unwrap_or('_');
+        if !first.is_ascii_alphabetic() {
+            return Err(Error::InvalidInput(format!(
+                "function name {:?} must start with an ASCII letter",
+                self.name
+            )));
+        }
+        for c in chars {
+            if !(c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                return Err(Error::InvalidInput(format!(
+                    "function name {:?} may only contain ASCII letters, digits, '_' or '-'",
+                    self.name
+                )));
+            }
+        }
+        if self.name.len() > 255 {
+            return Err(Error::InvalidInput(
+                "function name must be <= 255 characters".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Activity output — captures success / error, the handler's result,
+/// and timing for observability.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FunctionExecutionOutput {
+    /// Echo of the dispatched handler name.
+    pub name: String,
+    /// `true` when the handler completed without erroring.
+    pub success: bool,
+    /// Handler error message when `success == false`. Empty otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub error: String,
+    /// Handler `result` map.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub result: HashMap<String, String>,
+    /// Handler `data` payload.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data: Vec<u8>,
+    /// Wall-clock duration of the handler call (in millis on the wire).
+    #[serde(with = "humantime_compat")]
+    pub duration: Duration,
+    /// Unix-millis when the handler started. Zero on the default
+    /// instance.
+    #[serde(default)]
+    pub started_at_millis: u64,
+    /// Unix-millis when the handler finished. Zero on the default
+    /// instance.
+    #[serde(default)]
+    pub finished_at_millis: u64,
+}
+
+impl FunctionExecutionOutput {
+    /// Construct a successful output.
+    pub fn success(name: impl Into<String>, output: FunctionOutput) -> Self {
+        Self {
+            name: name.into(),
+            success: true,
+            result: output.result,
+            data: output.data,
+            ..Self::default()
+        }
+    }
+
+    /// Construct a failure output.
+    pub fn failure(name: impl Into<String>, err: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            success: false,
+            error: err.into(),
+            ..Self::default()
+        }
+    }
+}
+
+impl TaskOutput for FunctionExecutionOutput {
+    fn is_success(&self) -> bool {
+        self.success
+    }
+    fn error(&self) -> Option<&str> {
+        if self.error.is_empty() {
+            None
+        } else {
+            Some(self.error.as_str())
+        }
+    }
+}
+
+mod humantime_compat {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S: Serializer>(d: &Duration, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_u64(d.as_millis().try_into().unwrap_or(u64::MAX))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(de: D) -> Result<Duration, D::Error> {
+        u64::deserialize(de).map(Duration::from_millis)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn execution_input_rejects_empty_name() {
+        let i = FunctionExecutionInput::new("");
+        assert!(matches!(i.validate(), Err(Error::InvalidInput(_))));
+    }
+
+    #[test]
+    fn execution_input_rejects_name_starting_with_digit() {
+        let i = FunctionExecutionInput::new("1bad");
+        assert!(matches!(i.validate(), Err(Error::InvalidInput(_))));
+    }
+
+    #[test]
+    fn execution_input_rejects_name_with_space() {
+        let i = FunctionExecutionInput::new("bad name");
+        assert!(matches!(i.validate(), Err(Error::InvalidInput(_))));
+    }
+
+    #[test]
+    fn execution_input_accepts_letters_digits_underscores_hyphens() {
+        let i = FunctionExecutionInput::new("Good_Name-1");
+        assert!(i.validate().is_ok());
+    }
+
+    #[test]
+    fn execution_input_rejects_overlong_name() {
+        let long = "a".repeat(300);
+        let i = FunctionExecutionInput::new(long);
+        assert!(matches!(i.validate(), Err(Error::InvalidInput(_))));
+    }
+
+    #[test]
+    fn to_function_input_copies_fields() {
+        let mut i = FunctionExecutionInput::new("ok").with_args([("k", "v")]);
+        i.work_dir = "/tmp".into();
+        let fi = i.to_function_input();
+        assert_eq!(fi.args.get("k").map(String::as_str), Some("v"));
+        assert_eq!(fi.work_dir, "/tmp");
+    }
+
+    #[test]
+    fn output_success_and_failure_helpers() {
+        let s = FunctionExecutionOutput::success("f", FunctionOutput::with_result([("x", "1")]));
+        assert!(s.is_success());
+        assert_eq!(s.error(), None);
+
+        let f = FunctionExecutionOutput::failure("g", "boom");
+        assert!(!f.is_success());
+        assert_eq!(f.error(), Some("boom"));
+    }
+}

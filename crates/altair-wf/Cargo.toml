@@ -14,9 +14,16 @@ categories = ["asynchronous"]
 
 [features]
 default = []
+# Registry + named-function dispatch on top of the workflow patterns.
+# Enable when porting Go consumers of go-wf/function or building any
+# workflow that needs to look up a handler by string name at runtime.
+# Pulls in the temporalio-* crates directly because the SDK's
+# `#[activities]` macro expands to `::temporalio_sdk::*` /
+# `::temporalio_common::*` absolute paths.
+function = ["dep:temporalio-sdk", "dep:temporalio-common"]
 # Run this crate's own integration tests against a real Temporal container.
 # Requires Docker. Pulls in altair-temporal's TemporalContainer fixture.
-integration-tests = ["altair-temporal/testcontainers"]
+integration-tests = ["altair-temporal/testcontainers", "function"]
 
 [dependencies]
 altair-temporal = { path = "../altair-temporal", version = "0.2" }
@@ -27,6 +34,10 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 futures = { workspace = true }
+# Pulled in by the `function` feature so the SDK's `#[activities]`
+# macro can resolve its absolute paths.
+temporalio-sdk = { workspace = true, optional = true }
+temporalio-common = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

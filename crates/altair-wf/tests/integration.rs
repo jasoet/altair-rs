@@ -679,3 +679,208 @@ async fn parameterized_loop_cartesian_product_round_trip() {
     assert_eq!(out.total_success, 6);
     assert_eq!(out.results.len(), 6);
 }
+
+// ---------------------------------------------------------------------------
+// Function module (Phase 2): registry-based named-handler dispatch through
+// a real Temporal worker.
+// ---------------------------------------------------------------------------
+
+use altair_wf::function::{
+    FunctionActivities, FunctionExecutionInput, FunctionExecutionOutput, FunctionInput,
+    FunctionOutput, Registry,
+};
+
+#[workflow]
+#[derive(Default)]
+pub struct FunctionPipelineWf;
+
+#[workflow_methods]
+impl FunctionPipelineWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: PipelineInput<FunctionExecutionInput>,
+    ) -> WorkflowResult<PipelineOutput<FunctionExecutionOutput>> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let result = pipeline(input, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(FunctionActivities::execute_function, step, opts)
+                    .await
+                    .map_err(|e| {
+                        altair_wf::Error::activity("FunctionActivities::execute_function", e)
+                    })
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+fn make_function_activities() -> FunctionActivities {
+    let mut reg = Registry::new();
+    reg.register("upper", |input: FunctionInput| async move {
+        let v = input.args.get("text").cloned().unwrap_or_default();
+        Ok::<_, std::io::Error>(FunctionOutput::with_result([(
+            "out".to_string(),
+            v.to_uppercase(),
+        )]))
+    })
+    .unwrap();
+    reg.register("repeat", |input: FunctionInput| async move {
+        let text = input.args.get("text").cloned().unwrap_or_default();
+        let n: usize = input
+            .args
+            .get("count")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1);
+        Ok::<_, std::io::Error>(FunctionOutput::with_result([(
+            "out".to_string(),
+            text.repeat(n),
+        )]))
+    })
+    .unwrap();
+    reg.register("explode", |_| async move {
+        Err::<FunctionOutput, _>(std::io::Error::other("kaboom"))
+    })
+    .unwrap();
+    FunctionActivities::new(reg)
+}
+
+async fn build_function_worker(tq: &str) -> altair_temporal::Worker {
+    let temporal = temporal().await;
+    let cfg = temporal.config(tq);
+    WorkerBuilder::new(&cfg)
+        .register_workflow::<FunctionPipelineWf>()
+        .register_activities(make_function_activities())
+        .build()
+        .await
+        .expect("build worker")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn function_pipeline_dispatches_registered_handlers_by_name() {
+    let tq = unique("wf-fn-pipeline");
+    let worker = build_function_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("fn-pipeline-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let tasks = vec![
+            FunctionExecutionInput::new("upper").with_args([("text", "hello")]),
+            FunctionExecutionInput::new("repeat").with_args([("text", "ab"), ("count", "3")]),
+        ];
+        let input = PipelineInput {
+            tasks,
+            stop_on_error: false,
+            cleanup: false,
+        };
+        let handle = client
+            .start_workflow(
+                FunctionPipelineWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: PipelineOutput<FunctionExecutionOutput> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.total_success, 2);
+    assert_eq!(out.total_failed, 0);
+    assert_eq!(
+        out.results[0].result.get("out").map(String::as_str),
+        Some("HELLO")
+    );
+    assert_eq!(
+        out.results[1].result.get("out").map(String::as_str),
+        Some("ababab")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn function_handler_error_becomes_unsuccessful_output() {
+    let tq = unique("wf-fn-error");
+    let worker = build_function_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("fn-error-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let tasks = vec![
+            FunctionExecutionInput::new("upper").with_args([("text", "ok")]),
+            FunctionExecutionInput::new("explode"),
+            FunctionExecutionInput::new("upper").with_args([("text", "still ran")]),
+        ];
+        let input = PipelineInput {
+            tasks,
+            stop_on_error: false,
+            cleanup: false,
+        };
+        let handle = client
+            .start_workflow(
+                FunctionPipelineWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: PipelineOutput<FunctionExecutionOutput> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    // Handler errors are reported as unsuccessful outputs, not as
+    // workflow failures (the activity still returns Ok).
+    assert_eq!(out.total_success, 2);
+    assert_eq!(out.total_failed, 1);
+    assert!(out.results[1].error.contains("kaboom"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn function_unknown_handler_fails_with_activity_error() {
+    let tq = unique("wf-fn-unknown");
+    let worker = build_function_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("fn-unknown-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let input = PipelineInput {
+            tasks: vec![FunctionExecutionInput::new("ghost")],
+            stop_on_error: true,
+            cleanup: false,
+        };
+        let handle = client
+            .start_workflow(
+                FunctionPipelineWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        let res: Result<PipelineOutput<FunctionExecutionOutput>, _> =
+            handle.get_result(WorkflowGetResultOptions::default()).await;
+        res
+    };
+
+    let res = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    // Registry-miss is an infrastructure error → activity error →
+    // workflow failure under stop_on_error.
+    assert!(
+        res.is_err(),
+        "expected workflow failure for unknown handler",
+    );
+}
