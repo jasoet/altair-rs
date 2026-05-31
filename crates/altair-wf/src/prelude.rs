@@ -41,20 +41,18 @@
 //! // use altair_wf::prelude::*;
 //! ```
 //!
-//! # `function` feature re-exports
+//! # Optional feature re-exports
 //!
-//! When the `function` feature is enabled, this prelude also re-exports
-//! the named-handler types ([`Registry`], [`FunctionActivities`],
-//! [`FunctionInput`] / [`FunctionOutput`], [`FunctionExecutionInput`] /
-//! [`FunctionExecutionOutput`]) so a single glob import gives you both
-//! the patterns and the registry surface.
-//!
-//! [`Registry`]: crate::function::Registry
-//! [`FunctionActivities`]: crate::function::FunctionActivities
-//! [`FunctionInput`]: crate::function::FunctionInput
-//! [`FunctionOutput`]: crate::function::FunctionOutput
-//! [`FunctionExecutionInput`]: crate::function::FunctionExecutionInput
-//! [`FunctionExecutionOutput`]: crate::function::FunctionExecutionOutput
+//! - When the `function` feature is enabled, this prelude also
+//!   re-exports the named-handler types — `Registry`,
+//!   `FunctionActivities`, and the `Function*Input` / `Function*Output`
+//!   payloads — so a single glob import gives you both the patterns
+//!   and the registry surface.
+//! - When the `datasync` feature is enabled, the prelude re-exports the
+//!   core `Source` / `Mapper` / `Sink` traits, the `Runner` in-process
+//!   orchestrator, the chunked-sync helper and its `Cursor` /
+//!   `ChunkedSyncConfig` config types, plus `Partitioner` /
+//!   `ProgressTracker` for the chunk submodule.
 
 pub use crate::{
     DAGInput, DAGNode, DAGOutput, Error, FailureStrategy, LoopInput, LoopOutput, NodeResult,
@@ -81,4 +79,16 @@ pub use crate::{
 pub use crate::function::{
     FunctionActivities, FunctionExecutionInput, FunctionExecutionOutput, FunctionInput,
     FunctionOutput, Registry,
+};
+
+// `datasync` module re-exports.
+#[cfg(feature = "datasync")]
+pub use crate::datasync::chunk::{
+    ChunkedSyncConfig, Cursor, Partition, PartitionResult, Partitioner, ProgressTracker,
+    SyncResult as ChunkSyncResult, chunked_sync_run, iterate_partitions,
+};
+#[cfg(feature = "datasync")]
+pub use crate::datasync::{
+    DetailedMapper, IdentityMapper, Job, MapResult, Mapper, RecordMapper, Runner, Sink, Source,
+    SyncJobBuilder, SyncResult, WriteResult,
 };

@@ -45,6 +45,8 @@
 #![allow(clippy::missing_errors_doc)]
 
 mod dag;
+#[cfg(feature = "datasync")]
+pub mod datasync;
 mod error;
 #[cfg(feature = "function")]
 pub mod function;

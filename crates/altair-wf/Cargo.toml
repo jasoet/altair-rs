@@ -21,9 +21,18 @@ default = []
 # `#[activities]` macro expands to `::temporalio_sdk::*` /
 # `::temporalio_common::*` absolute paths.
 function = ["dep:temporalio-sdk", "dep:temporalio-common"]
+# Data-sync pipeline: Source -> Mapper -> Sink + partitioned, resumable
+# chunked sync (continue-as-new). SDK-agnostic core; the workflow body
+# wires its own activities and calls the `chunked_sync_run` helper.
+# Pulls in `async-trait` because the Source/Mapper/Sink traits use it.
+datasync = ["dep:async-trait"]
 # Run this crate's own integration tests against a real Temporal container.
 # Requires Docker. Pulls in altair-temporal's TemporalContainer fixture.
-integration-tests = ["altair-temporal/testcontainers", "function"]
+integration-tests = [
+    "altair-temporal/testcontainers",
+    "function",
+    "datasync",
+]
 
 [dependencies]
 altair-temporal = { path = "../altair-temporal", version = "0.2" }
@@ -38,6 +47,7 @@ futures = { workspace = true }
 # macro can resolve its absolute paths.
 temporalio-sdk = { workspace = true, optional = true }
 temporalio-common = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
