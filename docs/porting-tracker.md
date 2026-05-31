@@ -2,8 +2,8 @@
 
 Tracks the migration status of every package from [`github.com/jasoet/pkg`](https://github.com/jasoet/pkg) (Go) to its Rust equivalent in `altair-rs`.
 
-**Last updated:** 2026-05-29 (altair-temporal design + implementation in flight)
-**Reference Go version:** v2.13.0
+**Last updated:** 2026-06-01 (altair-wf datasync R1 fixes)
+**Reference Go version:** `jasoet/pkg` v2.13.0 + `jasoet/go-wf` (workflow + function + datasync modules)
 
 ## Published crates
 
@@ -76,6 +76,27 @@ These have clear Rust equivalents and will be added when a project needs them.
 | Go package | Likely Rust crate | Status | Concern | Notes |
 |---|---|---|---|---|
 | `argo` | `altair-argo` | ❌ Won't Port (provisional) | No Rust Argo client | Would need to wrap `kube-rs` + raw Argo CRDs manually — large surface area for narrow use case; revisit if real need surfaces |
+
+## `altair-wf` — port of `github.com/jasoet/go-wf`
+
+`altair-wf` is the only workspace crate that ports a *different* repo
+(`jasoet/go-wf`, the Temporal workflow library used by the user's
+production worker `parasync`). Status by Go module:
+
+| Go module | Rust surface | Status | Notes |
+|---|---|---|---|
+| `workflow/` (single / pipeline / parallel / loop / parameterized-loop / DAG) | core `altair_wf::*` (default features) | ✅ Done | Phase 1 — shipped + 2 deep-review rounds |
+| `function/` (named-handler registry + `ExecuteFunctionActivity`) | `altair_wf::function` (feature `function`) | ✅ Done | Phase 2 — shipped + 2 deep-review rounds |
+| `datasync/` core (`Source` / `Mapper` / `Sink` / `Runner` / `Job` / builder) | `altair_wf::datasync` (feature `datasync`) | ✅ Done | Phase 3 — first ship + R1 review |
+| `datasync/chunk/` core (`Partitioner`, `ProgressTracker`, `chunked_sync_run`, continue-as-new) | `altair_wf::datasync::chunk` | ✅ Done | Phase 3 — first ship + R1 review |
+| `datasync/insert_sink.go` (concrete `InsertIfAbsentSink`) | — | 💤 Deferred | Example sink; user implementations encouraged |
+| `datasync/chunk/date_sync.go` + `DatePartitioner` | — | 💤 Deferred | Time-range adapter — port as a follow-up |
+| `datasync/chunk/limiter.go` (`RateLimitRetry` decorator) | — | 💤 Deferred | Optional `PartitionFetcher` wrapper |
+| `datasync/internal/heartbeat` | — | 💤 Deferred | Per-partition heartbeat ticker — pending SDK ergonomics review |
+| `container/` (Docker / Podman) | — | ❌ Won't Port | Out of scope for `altair-wf`; see `altair-docker` if/when needed |
+
+The `altair-wf` crate ships from this repo, not from the `pkg` port; tracked
+here so deferral decisions stay discoverable.
 
 ## Cross-Cutting Deferred Items
 

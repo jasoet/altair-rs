@@ -39,6 +39,12 @@ impl WriteResult {
 /// Consumes records of type `U` and persists them to a destination.
 /// Implementations should be batch-friendly; the framework hands the
 /// entire mapped batch to a single `write` call.
+///
+/// `write` is `async` and may hold its `&self` across `.await` points.
+/// If your sink owns shared state (a connection pool, a buffer), use
+/// `tokio::sync::Mutex` rather than `std::sync::Mutex` for any lock
+/// that the future is held across — a blocking mutex held across
+/// `.await` deadlocks the runtime under multi-threaded schedulers.
 #[async_trait]
 pub trait Sink<U>: Send + Sync {
     /// Stable identifier used in logs, traces, and error contexts.

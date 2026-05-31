@@ -7,6 +7,20 @@
 //! is responsible for issuing
 //! [`WorkflowContext::continue_as_new`](altair_temporal::temporalio_sdk::WorkflowContext::continue_as_new)
 //! when the returned summary's `deferred` flag is set.
+//!
+//! # Determinism inside a Temporal workflow
+//!
+//! Every closure handed to [`chunked_sync_run`] runs inside the
+//! workflow body and therefore must respect Temporal's deterministic
+//! replay rules. In practice:
+//!
+//! - `list_partitions`, `run_partition`, the cursor `read` / `advance`
+//!   closures should wrap activity dispatches
+//!   (`ctx.start_activity(...).await`) — never call external services
+//!   directly from the closure body.
+//! - The `sleeper` closure **must** use the workflow-side timer
+//!   (`ctx.timer(d)` or equivalent), never `tokio::time::sleep` or
+//!   `std::thread::sleep` — those break replay determinism.
 
 use std::future::Future;
 use std::time::Duration;
@@ -21,6 +35,11 @@ pub struct ChunkedSyncConfig {
     pub job_name: String,
     /// Sleep duration inserted between partition activity calls. Zero
     /// disables the inter-partition delay.
+    ///
+    /// The sleep itself is performed by the `sleeper` closure passed
+    /// to [`chunked_sync_run`]. Inside a Temporal workflow body, that
+    /// closure must use the workflow-side timer (`ctx.timer(d)`) so
+    /// replay stays deterministic.
     pub partition_sleep: Duration,
     /// Cap on partitions handled by one execution. When `> 0` and the
     /// partition list (after cursor filtering) exceeds this number, the
@@ -62,6 +81,19 @@ impl ChunkedSyncConfig {
 /// Cursor-handling shape. Pair `read` + `advance` to enable resumable
 /// chunked sync; pass [`Cursor::None`] when the partitioner is bounded
 /// and there is no need to skip processed work.
+///
+/// **Inclusion semantics.** The cursor is interpreted as "every
+/// partition whose `start >= cursor` is unprocessed". A partition with
+/// `start` exactly equal to the cursor is **kept** (processed); the
+/// `advance` closure should therefore record `partition.end`, not
+/// `partition.start`. This mirrors the Go original at
+/// `go-wf/datasync/chunk/sync.go`.
+///
+/// **Idempotency.** `advance` may be invoked more than once for the
+/// same `completed` value if the workflow retries after a transient
+/// activity failure — implementations should be idempotent (an
+/// "INSERT … ON CONFLICT DO NOTHING" pattern, an upsert against a
+/// monotone column, or equivalent).
 pub enum Cursor<ReadFn, AdvFn> {
     /// No cursor — process every partition the partitioner returns.
     ///
@@ -73,9 +105,11 @@ pub enum Cursor<ReadFn, AdvFn> {
     /// has been recorded). `advance` is invoked after each successful
     /// partition with that partition's `end` key.
     Some {
-        /// Read the current cursor value.
+        /// Read the current cursor value. Returning `Ok(None)` reports
+        /// "no cursor yet" — every partition will be processed.
         read: ReadFn,
-        /// Record progress past `completed`.
+        /// Record progress past `completed` (always a partition `end`).
+        /// Must be idempotent; see the type-level note above.
         advance: AdvFn,
     },
 }
@@ -323,6 +357,49 @@ mod tests {
         .unwrap();
         assert_eq!(result.total_partitions, 2);
         assert_eq!(*seen.lock().unwrap(), vec![10, 20]);
+    }
+
+    #[tokio::test]
+    async fn cursor_at_partition_start_is_inclusive() {
+        // Regression: cursor == partition.start retains that partition
+        // (filter is `p.start >= c`). Pins the inclusive-on-start
+        // semantic documented on `Cursor::Some::read`.
+        let parts = vec![
+            Partition::new(0_i64, 10),
+            Partition::new(10, 20),
+            Partition::new(20, 30),
+        ];
+        let result = chunked_sync_run(
+            ChunkedSyncConfig::new("j"),
+            || async move { Ok(parts) },
+            |p| async move { Ok(pr(p.start, p.end, 1, 1)) },
+            Cursor::Some {
+                read: || async { Ok(Some(10_i64)) },
+                advance: |_end: i64| async { Ok(()) },
+            },
+            |_d| async {},
+        )
+        .await
+        .unwrap();
+        // cursor=10 keeps starts 10 and 20 — i.e. [10,20) and [20,30).
+        assert_eq!(result.total_partitions, 2);
+        assert_eq!(result.partitions[0].start, 10);
+        assert_eq!(result.partitions[1].start, 20);
+    }
+
+    #[tokio::test]
+    async fn list_partitions_error_propagates_to_caller() {
+        let result = chunked_sync_run::<i64, _, _, _, _, _, _, _, NoCursorRead, NoCursorAdv, _>(
+            ChunkedSyncConfig::new("j"),
+            || async move {
+                Err::<Vec<Partition<i64>>, _>(crate::error::Error::InvalidInput("nope".into()))
+            },
+            |p| async move { Ok(pr(p.start, p.end, 0, 0)) },
+            Cursor::None,
+            |_d| async {},
+        )
+        .await;
+        assert!(matches!(result, Err(crate::error::Error::InvalidInput(_))));
     }
 
     #[tokio::test]

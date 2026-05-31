@@ -1,5 +1,9 @@
 //! `Source` trait — produces records of type `T` from an external system.
 
+// `#[async_trait]` is intentional: `Runner` and `Job<T, U>` hold
+// `Arc<dyn Source<T>>` trait objects, and native async-fn-in-trait
+// (stable since 1.75) is not object-safe. Don't "modernize" this to
+// the bare `async fn` form without re-architecting the runner.
 use async_trait::async_trait;
 
 use crate::error::Result;

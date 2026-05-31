@@ -75,12 +75,15 @@ where
 /// rather than failing the whole batch — useful when occasional bad
 /// records should not stop the sync.
 ///
-/// `F` is `Fn(&T) -> Result<U, E>` where `E: Display`; the error message
-/// is captured in `skip_reasons`.
+/// `F` is `Fn(&T) -> Result<U, E>` where `E` satisfies
+/// `std::error::Error + Send + Sync + 'static`; the error message is
+/// captured in `skip_reasons` via `Display`. The bound matches the one
+/// the `function` module's registry uses for handler errors so user
+/// error types compose between the two features without conversion.
 pub struct RecordMapper<T, U, F, E>
 where
     F: Fn(&T) -> std::result::Result<U, E> + Send + Sync + 'static,
-    E: std::fmt::Display + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
     T: Send + Sync + 'static,
     U: Send + 'static,
 {
@@ -92,7 +95,7 @@ where
 impl<T, U, F, E> RecordMapper<T, U, F, E>
 where
     F: Fn(&T) -> std::result::Result<U, E> + Send + Sync + 'static,
-    E: std::fmt::Display + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
     T: Send + Sync + 'static,
     U: Send + 'static,
 {
@@ -116,7 +119,7 @@ where
 impl<T, U, F, E> DetailedMapper<T, U> for RecordMapper<T, U, F, E>
 where
     F: Fn(&T) -> std::result::Result<U, E> + Send + Sync + 'static,
-    E: std::fmt::Display + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
     T: Send + Sync + 'static,
     U: Send + 'static,
 {
@@ -143,7 +146,7 @@ where
 impl<T, U, F, E> Mapper<T, U> for RecordMapper<T, U, F, E>
 where
     F: Fn(&T) -> std::result::Result<U, E> + Send + Sync + 'static,
-    E: std::fmt::Display + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
     T: Send + Sync + 'static,
     U: Send + 'static,
 {
@@ -165,13 +168,16 @@ mod tests {
 
     #[tokio::test]
     async fn record_mapper_collects_skip_reasons() {
-        let m = RecordMapper::new("doubler", |x: &i32| -> std::result::Result<i32, String> {
-            if *x % 2 == 0 {
-                Ok(x * 2)
-            } else {
-                Err(format!("odd value {x}"))
-            }
-        });
+        let m = RecordMapper::new(
+            "doubler",
+            |x: &i32| -> std::result::Result<i32, std::io::Error> {
+                if *x % 2 == 0 {
+                    Ok(x * 2)
+                } else {
+                    Err(std::io::Error::other(format!("odd value {x}")))
+                }
+            },
+        );
         let detail = m.map_detailed(vec![1, 2, 3, 4]);
         assert_eq!(detail.records, vec![4, 8]);
         assert_eq!(detail.skipped, 2);
@@ -181,20 +187,41 @@ mod tests {
 
     #[tokio::test]
     async fn record_mapper_via_mapper_trait_drops_skips() {
-        let m = RecordMapper::new("doubler", |x: &i32| -> std::result::Result<i32, String> {
-            if *x % 2 == 0 {
-                Ok(x * 2)
-            } else {
-                Err("odd".into())
-            }
-        });
+        let m = RecordMapper::new(
+            "doubler",
+            |x: &i32| -> std::result::Result<i32, std::io::Error> {
+                if *x % 2 == 0 {
+                    Ok(x * 2)
+                } else {
+                    Err(std::io::Error::other("odd"))
+                }
+            },
+        );
         let out = m.map(vec![1, 2, 3, 4]).await.unwrap();
         assert_eq!(out, vec![4, 8]);
     }
 
+    #[tokio::test]
+    async fn record_mapper_happy_path_preserves_all_records() {
+        // Regression: when every record maps cleanly, `Mapper::map` must
+        // return them in order with zero skips — pins the no-skip branch
+        // of `DetailedMapper::map_detailed`.
+        let m = RecordMapper::new(
+            "doubler",
+            |x: &i32| -> std::result::Result<i32, std::io::Error> { Ok(x * 2) },
+        );
+        let detail = m.map_detailed(vec![1, 2, 3]);
+        assert_eq!(detail.records, vec![2, 4, 6]);
+        assert_eq!(detail.skipped, 0);
+        assert!(detail.skip_reasons.is_empty());
+
+        let mapped = m.map(vec![10, 20, 30]).await.unwrap();
+        assert_eq!(mapped, vec![20, 40, 60]);
+    }
+
     #[test]
     fn record_mapper_name_accessor() {
-        let m: RecordMapper<i32, i32, _, String> =
+        let m: RecordMapper<i32, i32, _, std::io::Error> =
             RecordMapper::new("doubler", |x: &i32| Ok(x * 2));
         assert_eq!(m.name(), "doubler");
     }

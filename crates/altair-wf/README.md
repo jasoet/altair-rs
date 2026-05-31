@@ -2,11 +2,13 @@
 
 [![crates.io](https://img.shields.io/crates/v/altair-wf.svg)](https://crates.io/crates/altair-wf)
 
-Reusable Temporal workflow patterns: single-task, pipeline (sequential), parallel, loop, parameterized loop, and DAG with cycle detection. Built on [altair-temporal](https://crates.io/crates/altair-temporal).
+Reusable Temporal workflow patterns plus two opt-in feature modules:
 
-Spiritual port of the `workflow` module in [`github.com/jasoet/go-wf`](https://github.com/jasoet/go-wf).
+- **Core patterns** (always on): single-task, pipeline (sequential), parallel, loop, parameterized loop, and DAG with cycle detection. Ports the `workflow` module of [`github.com/jasoet/go-wf`](https://github.com/jasoet/go-wf).
+- **`function` feature**: named-handler registry + a single Temporal activity that dispatches by name. Lets a workflow run "this batch of named jobs" without declaring a typed activity per handler.
+- **`datasync` feature**: a `Source` → `Mapper` → `Sink` pipeline (in-process `Runner` and a Temporal workflow shape) plus a `chunk` submodule that adds partitioned, resumable orchestration with continue-as-new support.
 
-Part of the [altair-rs](https://github.com/jasoet/altair-rs) workspace.
+Built on [altair-temporal](https://crates.io/crates/altair-temporal). Part of the [altair-rs](https://github.com/jasoet/altair-rs) workspace.
 
 ## Why
 
@@ -18,11 +20,18 @@ The patterns are **SDK-agnostic** — each takes an `execute_one` closure that y
 
 ```toml
 [dependencies]
-altair-wf = "0.1"
+altair-wf = "0.2"
 altair-temporal = "0.2"
 # Required by the Temporal SDK's #[workflow] / #[activities] macros:
 futures = "0.3"
 futures-util = "0.3"
+```
+
+Opt-in features:
+
+```toml
+[dependencies]
+altair-wf = { version = "0.2", features = ["function", "datasync"] }
 ```
 
 ## Patterns
@@ -208,6 +217,72 @@ impl DeployWorkflow {
 }
 ```
 
+## `function` feature — named-handler dispatch
+
+When you have many small jobs whose differences are data-only, declaring a typed activity for each one becomes tedious. The `function` feature adds a thread-safe `Registry<String, Handler>` and a single Temporal activity (`FunctionActivities::execute_function`) that looks the handler up by name and runs it. Combine with the core patterns (`pipeline`, `parallel`) to dispatch a batch of named jobs.
+
+```rust,no_run
+# #[cfg(feature = "function")] {
+use altair_wf::function::{FunctionInput, FunctionOutput, Registry};
+
+# async fn ex() -> anyhow::Result<()> {
+let mut reg = Registry::new();
+reg.register("greet", |input: FunctionInput| async move {
+    let who = input.args.get("name").cloned().unwrap_or_default();
+    Ok::<_, std::io::Error>(FunctionOutput::with_result([
+        ("msg".to_string(), format!("hello {who}"))
+    ]))
+})?;
+# Ok(()) }
+# }
+```
+
+Handler errors are reported as `FunctionExecutionOutput { success: false, ... }`, **not** as activity failures — so the pattern aggregations (`PipelineOutput::total_success` etc.) stay accurate. Infrastructure errors (validation, registry miss) become activity errors so Temporal can retry them.
+
+## `datasync` feature — Source → Mapper → Sink (+ chunk)
+
+Models data-sync jobs as a pipeline: a `Source<T>` produces records, a `Mapper<T, U>` transforms them, and a `Sink<U>` writes them. The in-process `Runner` drives one fetch-map-write cycle without Temporal; for production, wire the trio into a `#[workflow]` body.
+
+```rust,no_run
+# #[cfg(feature = "datasync")] {
+use std::sync::Arc;
+use altair_wf::datasync::{IdentityMapper, Runner, Sink, Source, WriteResult};
+use async_trait::async_trait;
+
+struct VecSource(Vec<i32>);
+#[async_trait]
+impl Source<i32> for VecSource {
+    fn name(&self) -> &str { "vec" }
+    async fn fetch(&self) -> altair_wf::Result<Vec<i32>> { Ok(self.0.clone()) }
+}
+
+struct CounterSink;
+#[async_trait]
+impl Sink<i32> for CounterSink {
+    fn name(&self) -> &str { "counter" }
+    async fn write(&self, records: Vec<i32>) -> altair_wf::Result<WriteResult> {
+        Ok(WriteResult { inserted: records.len(), ..Default::default() })
+    }
+}
+
+# async fn ex() -> altair_wf::Result<()> {
+let runner: Runner<i32, i32> = Runner::new(
+    Arc::new(VecSource(vec![1, 2, 3])),
+    Arc::new(IdentityMapper::new()),
+    Arc::new(CounterSink),
+);
+let out = runner.run().await?;
+assert_eq!(out.total_fetched, 3);
+# Ok(()) }
+# }
+```
+
+### `datasync::chunk` — partitioned + resumable
+
+For jobs whose record count would overflow a single Temporal history, the `chunk` submodule walks an ordered list of `Partition<K>` ranges, optionally remembers progress via a `ProgressTracker<K>`, and uses continue-as-new to hand the rest off to a fresh execution.
+
+The `chunked_sync_run` helper is SDK-agnostic and takes async closures for each step. Inside a `#[workflow]` body the closures wrap activity calls; outside (tests, scripts) they can call services directly. The caller checks `result.deferred` and issues `continue_as_new` at the workflow boundary — see `crates/altair-wf/src/datasync/chunk/mod.rs` for a sketch.
+
 ## Validation
 
 Every input carries a `validate()` method:
@@ -228,6 +303,14 @@ Patterns call `validate()` at entry; failures surface as `Error::InvalidInput`.
 | `Error::InvalidInput` | A `validate()` call rejected the input or pattern invariants (cycle, missing dep) |
 | `Error::PatternStopped` | A step failed and the pattern was configured with `fail_fast` / `stop_on_error` |
 | `Error::Activity` | The underlying SDK call failed (network, panic, timeout, retry exhaustion) — wrap from your `execute_one` closure when needed |
+
+## Phase status
+
+The Go [`go-wf`](https://github.com/jasoet/go-wf) port is shipped in three phases inside this crate:
+
+- ✅ Phase 1 — core workflow patterns (single / pipeline / parallel / loop / DAG), shipped + deep-reviewed twice.
+- ✅ Phase 2 — `function` module (registry + named-handler activity), shipped + deep-reviewed twice.
+- ✅ Phase 3 — `datasync` core + `chunk` submodule (Source / Mapper / Sink + partitioned resumable orchestration). Some `chunk` extras (date-range adapter, rate-limit retry decorator, `InsertIfAbsentSink`) are deferred to follow-up PRs to keep the surface reviewable; track in [docs/porting-tracker.md](../../docs/porting-tracker.md).
 
 ## License
 
