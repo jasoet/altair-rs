@@ -1,12 +1,20 @@
 //! Single-file gzip compression via `flate2`.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter};
+use std::io::{self, BufReader, BufWriter, Read};
 use std::path::Path;
+
+/// Default cap on bytes written by the decompression recipes (4 GiB).
+///
+/// Used by [`decompress_file`], [`crate::untar`], [`crate::unzip`], and
+/// [`crate::untar_gz`]. Override with each function's `*_with_limit`
+/// counterpart when extracting trusted archives that may legitimately
+/// exceed 4 GiB.
+pub const DEFAULT_DECOMPRESS_LIMIT_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 /// Compress `input` to `output` using gzip at the default compression level.
 ///
@@ -28,15 +36,49 @@ pub fn compress_file(input: impl AsRef<Path>, output: impl AsRef<Path>) -> Resul
 
 /// Decompress a gzip file to `output`.
 ///
+/// Caps decompressed output at [`DEFAULT_DECOMPRESS_LIMIT_BYTES`] (4 GiB)
+/// — files that expand beyond the limit yield [`Error::DecompressionLimit`]
+/// so a maliciously-crafted 1 KiB `.gz` cannot fill the disk. Use
+/// [`decompress_file_with_limit`] to override.
+///
 /// ```no_run
 /// altair_compress::decompress_file("data.bin.gz", "data.bin").unwrap();
 /// ```
 pub fn decompress_file(input: impl AsRef<Path>, output: impl AsRef<Path>) -> Result<()> {
+    decompress_file_with_limit(input, output, DEFAULT_DECOMPRESS_LIMIT_BYTES)
+}
+
+/// Like [`decompress_file`] but with a caller-specified
+/// `max_output_bytes` cap. Returns [`Error::DecompressionLimit`] if the
+/// decompressed stream exceeds the cap.
+///
+/// ```no_run
+/// // 100 MiB cap.
+/// altair_compress::decompress_file_with_limit(
+///     "data.bin.gz",
+///     "data.bin",
+///     100 * 1024 * 1024,
+/// ).unwrap();
+/// ```
+pub fn decompress_file_with_limit(
+    input: impl AsRef<Path>,
+    output: impl AsRef<Path>,
+    max_output_bytes: u64,
+) -> Result<()> {
     let input_file = File::open(input.as_ref())?;
-    let mut decoder = GzDecoder::new(BufReader::new(input_file));
+    let decoder = GzDecoder::new(BufReader::new(input_file));
+    // Read at most max+1 bytes — if we receive more than max, the
+    // stream is over-limit and we fail.
+    let mut bounded = decoder.take(max_output_bytes.saturating_add(1));
     let output_file = File::create(output.as_ref())?;
     let mut writer = BufWriter::new(output_file);
-    io::copy(&mut decoder, &mut writer)?;
+    let written = io::copy(&mut bounded, &mut writer)?;
+    if written > max_output_bytes {
+        return Err(Error::DecompressionLimit {
+            limit: max_output_bytes,
+            kind: "gzip-stream",
+        });
+    }
     Ok(())
 }
 

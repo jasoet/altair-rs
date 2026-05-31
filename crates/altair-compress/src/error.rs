@@ -37,6 +37,18 @@ pub enum Error {
         /// Why it was rejected.
         reason: String,
     },
+
+    /// Decompressed output exceeded the configured byte cap. Mitigates
+    /// gzip / zip "decompression bombs" — a tiny archive that would
+    /// expand to gigabytes on disk or in memory.
+    #[error("decompressed output exceeded {limit} bytes (kind: {kind})")]
+    DecompressionLimit {
+        /// The configured cap.
+        limit: u64,
+        /// Where the cap was hit — `"zip-entry"`, `"gzip-stream"`,
+        /// `"tar-entry"`, etc.
+        kind: &'static str,
+    },
 }
 
 /// Convenience result alias for this crate.
