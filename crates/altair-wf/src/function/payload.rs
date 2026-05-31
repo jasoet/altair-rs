@@ -42,21 +42,54 @@ pub struct FunctionInput {
 }
 
 impl FunctionInput {
-    /// Convenience: build a `FunctionInput` from an iterator of
-    /// `(name, value)` argument pairs.
-    pub fn with_args<I, K, V>(args: I) -> Self
+    /// Build an empty `FunctionInput`. Chain `with_*` to populate.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Replace `args` and return `self` for chaining.
+    ///
+    /// Mirrors [`FunctionExecutionInput::with_args`] so the two payload
+    /// types share the same builder idiom.
+    #[must_use]
+    pub fn with_args<I, K, V>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = (K, V)>,
         K: Into<String>,
         V: Into<String>,
     {
-        Self {
-            args: args
-                .into_iter()
-                .map(|(k, v)| (k.into(), v.into()))
-                .collect(),
-            ..Self::default()
-        }
+        self.args = args
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect();
+        self
+    }
+
+    /// Replace `data` and return `self` for chaining.
+    #[must_use]
+    pub fn with_data(mut self, data: impl Into<Vec<u8>>) -> Self {
+        self.data = data.into();
+        self
+    }
+
+    /// Replace `env` and return `self` for chaining.
+    #[must_use]
+    pub fn with_env<I, K, V>(mut self, env: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.env = env.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+        self
+    }
+
+    /// Replace `work_dir` and return `self` for chaining.
+    #[must_use]
+    pub fn with_work_dir(mut self, work_dir: impl Into<String>) -> Self {
+        self.work_dir = work_dir.into();
+        self
     }
 }
 
@@ -199,7 +232,9 @@ impl FunctionExecutionInput {
         self
     }
 
-    /// Project to a [`FunctionInput`] for handler dispatch.
+    /// Project to a [`FunctionInput`] for handler dispatch, cloning
+    /// the forwarded fields. Use [`Self::into_function_input`] to
+    /// avoid the clones when you no longer need the execution input.
     #[must_use]
     pub fn to_function_input(&self) -> FunctionInput {
         FunctionInput {
@@ -207,6 +242,18 @@ impl FunctionExecutionInput {
             data: self.data.clone(),
             env: self.env.clone(),
             work_dir: self.work_dir.clone(),
+        }
+    }
+
+    /// Consume `self` into a [`FunctionInput`] for handler dispatch.
+    /// Avoids the field clones of [`Self::to_function_input`].
+    #[must_use]
+    pub fn into_function_input(self) -> FunctionInput {
+        FunctionInput {
+            args: self.args,
+            data: self.data,
+            env: self.env,
+            work_dir: self.work_dir,
         }
     }
 }

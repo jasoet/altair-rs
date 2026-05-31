@@ -808,7 +808,7 @@ async fn function_pipeline_dispatches_registered_handlers_by_name() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn function_handler_error_becomes_unsuccessful_output() {
+async fn function_pipeline_continue_on_error_records_handler_failure_in_results() {
     let tq = unique("wf-fn-error");
     let worker = build_function_worker(&tq).await;
     let client = temporal_client().await;

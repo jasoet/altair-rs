@@ -40,6 +40,21 @@
 //! // BAD — would shadow std::result::Result
 //! // use altair_wf::prelude::*;
 //! ```
+//!
+//! # `function` feature re-exports
+//!
+//! When the `function` feature is enabled, this prelude also re-exports
+//! the named-handler types ([`Registry`], [`FunctionActivities`],
+//! [`FunctionInput`] / [`FunctionOutput`], [`FunctionExecutionInput`] /
+//! [`FunctionExecutionOutput`]) so a single glob import gives you both
+//! the patterns and the registry surface.
+//!
+//! [`Registry`]: crate::function::Registry
+//! [`FunctionActivities`]: crate::function::FunctionActivities
+//! [`FunctionInput`]: crate::function::FunctionInput
+//! [`FunctionOutput`]: crate::function::FunctionOutput
+//! [`FunctionExecutionInput`]: crate::function::FunctionExecutionInput
+//! [`FunctionExecutionOutput`]: crate::function::FunctionExecutionOutput
 
 pub use crate::{
     DAGInput, DAGNode, DAGOutput, Error, FailureStrategy, LoopInput, LoopOutput, NodeResult,
@@ -59,9 +74,11 @@ pub use crate::{
 };
 
 // `function` module re-exports so feature-enabled consumers can opt
-// in with a single glob import.
+// in with a single glob import. `HandlerError` is intentionally
+// excluded — users supply concrete errors satisfying `std::error::Error`,
+// they don't construct or pattern-match the boxed alias.
 #[cfg(feature = "function")]
 pub use crate::function::{
     FunctionActivities, FunctionExecutionInput, FunctionExecutionOutput, FunctionInput,
-    FunctionOutput, HandlerError, Registry,
+    FunctionOutput, Registry,
 };

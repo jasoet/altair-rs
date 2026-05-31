@@ -77,11 +77,17 @@ impl FunctionActivities {
             }
         };
 
-        let fn_input = input.to_function_input();
+        // Consume `input` into its name and a handler payload so we
+        // don't clone the `args`/`data`/`env`/`work_dir` maps and vecs
+        // on the hot path.
+        let name = input.name.clone();
+        let fn_input = input.into_function_input();
         // Catch handler panics so a single broken handler can't bring
-        // the activity worker down. AssertUnwindSafe is sound here
-        // because we only consume `fn_input` and read `input.name`
-        // afterwards.
+        // the activity worker down. `AssertUnwindSafe` is sound here:
+        // the inner future owns `fn_input` (moved in) and the wrapper
+        // stored in the registry holds an `Arc<dyn Fn>` with no
+        // interior mutability, so a mid-poll panic drops the future's
+        // state cleanly without leaving any shared state inconsistent.
         let result = AssertUnwindSafe(handler(fn_input)).catch_unwind().await;
 
         let finished = started.elapsed();
@@ -89,7 +95,7 @@ impl FunctionActivities {
 
         let out = match result {
             Ok(Ok(output)) => FunctionExecutionOutput {
-                name: input.name.clone(),
+                name,
                 success: true,
                 error: String::new(),
                 result: output.result,
@@ -99,9 +105,13 @@ impl FunctionActivities {
                 finished_at_millis,
             },
             Ok(Err(e)) => FunctionExecutionOutput {
-                name: input.name.clone(),
+                name,
                 success: false,
-                error: format!("{e}"),
+                // A user `Display` impl that itself panics could escape
+                // the future's `catch_unwind` above (the call site lives
+                // outside the polled future). Catch it explicitly and
+                // fall back to a static message.
+                error: render_handler_error(&*e),
                 result: std::collections::HashMap::new(),
                 data: Vec::new(),
                 duration: finished,
@@ -109,7 +119,7 @@ impl FunctionActivities {
                 finished_at_millis,
             },
             Err(panic) => FunctionExecutionOutput {
-                name: input.name.clone(),
+                name,
                 success: false,
                 error: render_panic(&*panic),
                 result: std::collections::HashMap::new(),
@@ -128,6 +138,15 @@ fn unix_millis() -> u64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+/// Render a user error to a string, with a defence-in-depth
+/// `catch_unwind` around the `Display` call. A user `Display` impl
+/// that itself panics would otherwise propagate out of the activity
+/// body (it's evaluated outside the future's `catch_unwind`).
+fn render_handler_error(e: &(dyn std::error::Error + Send + Sync)) -> String {
+    std::panic::catch_unwind(AssertUnwindSafe(|| format!("{e}")))
+        .unwrap_or_else(|_| "<handler error: Display impl panicked>".to_string())
 }
 
 fn render_panic(payload: &(dyn std::any::Any + Send)) -> String {
