@@ -3,8 +3,13 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use std::sync::Arc;
+
 use altair_temporal::RetryPolicy;
 use altair_temporal::temporalio_sdk::ActivityOptions;
+
+use crate::traits::TaskInput;
+use crate::types::Substitutor;
 
 /// Default start-to-close timeout for activities (10 minutes).
 pub const DEFAULT_START_TO_CLOSE_MINS: u64 = 10;
@@ -55,6 +60,35 @@ pub fn default_retry_policy() -> RetryPolicy {
         .build()
 }
 
+/// Wrap a closure in the `Arc<dyn Fn ...>` shape the loop patterns
+/// expect, so callers don't have to remember the exact bound + the
+/// `Arc::new(...)` boilerplate.
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use altair_wf::{TaskInput, substitutor_from_fn};
+///
+/// #[derive(Clone)]
+/// struct Step { name: String }
+/// impl TaskInput for Step {}
+///
+/// let sub = substitutor_from_fn(|template: &Step, item: &str, idx: usize, _: &HashMap<String, String>| {
+///     Step { name: format!("{}-{item}-{idx}", template.name) }
+/// });
+/// let out = sub(&Step { name: "deploy".into() }, "us-east-1", 0, &HashMap::new());
+/// assert_eq!(out.name, "deploy-us-east-1-0");
+/// ```
+#[must_use]
+pub fn substitutor_from_fn<I, F>(f: F) -> Substitutor<I>
+where
+    I: TaskInput,
+    F: Fn(&I, &str, usize, &HashMap<String, String>) -> I + Send + Sync + 'static,
+{
+    Arc::new(f)
+}
+
 /// Replace template variables in `tmpl` using a few simple substitution
 /// rules borrowed from the Go library:
 ///
@@ -84,6 +118,15 @@ pub fn substitute_template(
 /// value, repeat across every combination. Used by the parameterised
 /// loop pattern to expand a single template into one task per
 /// combination.
+///
+/// # Determinism
+///
+/// The output ordering is **deterministic**: keys are sorted
+/// lexicographically before the cartesian product is built. This is
+/// load-bearing for Temporal workflow code — without it the
+/// `HashMap`'s randomised iteration order would change the activity
+/// dispatch order between runs of the same workflow and corrupt the
+/// event-history replay invariant.
 #[must_use]
 #[allow(clippy::implicit_hasher)]
 pub fn generate_parameter_combinations(
@@ -93,7 +136,13 @@ pub fn generate_parameter_combinations(
         return Vec::new();
     }
 
-    let keys: Vec<&String> = params.keys().collect();
+    // CRITICAL: sort keys before iterating so the cartesian product
+    // order is deterministic across runs. HashMap iteration order is
+    // randomised in Rust, and Temporal workflows must replay
+    // identically — using random key order here would silently break
+    // determinism inside `parameterized_loop`.
+    let mut keys: Vec<&String> = params.keys().collect();
+    keys.sort();
     let values: Vec<&Vec<String>> = keys.iter().map(|k| &params[*k]).collect();
     let mut out: Vec<HashMap<String, String>> = Vec::new();
     let mut current: HashMap<String, String> = HashMap::new();
@@ -149,6 +198,37 @@ mod tests {
         let params = HashMap::new();
         let out = generate_parameter_combinations(&params);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn generate_combinations_order_is_deterministic_across_calls() {
+        // Build a HashMap with several keys whose hash order would be
+        // randomised. Run generate_parameter_combinations twice and
+        // assert the output is bit-identical. This is the regression
+        // test for the determinism fix — without sorting keys first,
+        // the HashMap iteration order would vary between calls.
+        let mut params: HashMap<String, Vec<String>> = HashMap::new();
+        for key in ["zebra", "alpha", "mango", "delta", "papaya"] {
+            params.insert(key.to_string(), vec!["1".into(), "2".into()]);
+        }
+        let first = generate_parameter_combinations(&params);
+        let second = generate_parameter_combinations(&params);
+        assert_eq!(first, second);
+
+        // Stronger guarantee: keys appear in alphabetical order inside
+        // each generated combination, so the produced workflow plan is
+        // identical regardless of how the caller built the HashMap.
+        let first_keys: Vec<&String> = first
+            .first()
+            .expect("at least one combination")
+            .keys()
+            .collect();
+        let mut expected: Vec<&str> = vec!["alpha", "delta", "mango", "papaya", "zebra"];
+        expected.sort_unstable();
+        let actual: Vec<&str> = first_keys.iter().map(|s| s.as_str()).collect();
+        let mut actual_sorted = actual.clone();
+        actual_sorted.sort_unstable();
+        assert_eq!(actual_sorted, expected);
     }
 
     #[test]

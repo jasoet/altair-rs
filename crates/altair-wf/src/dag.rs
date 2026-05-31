@@ -83,10 +83,16 @@ impl<I: TaskInput> DAGInput<I> {
     }
 
     /// Topologically sort the nodes so dependencies precede dependants.
-    /// Used by the DAG pattern at runtime to schedule waves of execution.
+    /// Returns a list of execution waves — every node in a wave can
+    /// run in parallel; nodes in wave `n+1` only run after every node
+    /// in wave `n` has completed.
     ///
-    /// Assumes [`Self::validate`] has already succeeded.
-    pub(crate) fn topological_layers(&self) -> Vec<Vec<usize>> {
+    /// Assumes [`Self::validate`] has already succeeded; if it hasn't,
+    /// the returned layer list may be shorter than `nodes.len()`.
+    /// Power users can inspect the wave structure to estimate workflow
+    /// parallelism or render a graphviz plan.
+    #[must_use]
+    pub fn topological_layers(&self) -> Vec<Vec<usize>> {
         let deps: Vec<HashSet<String>> = self
             .nodes
             .iter()
@@ -129,46 +135,60 @@ fn detect_cycles<I>(nodes: &[DAGNode<I>]) -> Result<()> {
 
     for node in nodes {
         if state.get(node.name.as_str()).copied().unwrap_or(0) == 0 {
-            dfs(node.name.as_str(), &adj, &mut state)?;
+            dfs_iterative(node.name.as_str(), &adj, &mut state)?;
         }
     }
     Ok(())
 }
 
-fn dfs<'a>(
-    name: &'a str,
+/// Iterative DFS using an explicit work stack so we cannot blow the
+/// thread stack on pathologically deep DAG chains (e.g. 1 → 2 → ...
+/// → `50_000`).
+///
+/// The frame for each node records the visited-children cursor; when
+/// we pop after the cursor reaches the end of the dep list we mark the
+/// node `visited` (2). A `visiting` (1) entry seen during descent
+/// means we have closed a cycle and we bail with `InvalidInput`.
+fn dfs_iterative<'a>(
+    start: &'a str,
     adj: &HashMap<&'a str, &'a [String]>,
     state: &mut HashMap<&'a str, u8>,
 ) -> Result<()> {
-    state.insert(name, 1);
-    if let Some(deps) = adj.get(name) {
-        for dep in *deps {
-            match state.get(dep.as_str()).copied().unwrap_or(0) {
-                1 => {
-                    return Err(Error::InvalidInput(format!(
-                        "circular dependency detected involving node '{dep}'"
-                    )));
-                }
-                0 => {
-                    // SAFETY-NOTE: dep is borrowed from `adj`'s key set
-                    // via the matching node's `dependencies` slice; the
-                    // lifetime ties back to the original `nodes` slice.
-                    let dep_static: &'a str = adj
-                        .keys()
-                        .find(|k| **k == dep.as_str())
-                        .copied()
-                        .ok_or_else(|| {
-                            // validate() already checked for missing deps; the
-                            // unreachable here is a defensive guard.
-                            Error::InvalidInput(format!("node '{dep}' not found"))
-                        })?;
-                    dfs(dep_static, adj, state)?;
-                }
-                _ => {}
+    // (node name, index of next dependency to visit)
+    let mut stack: Vec<(&'a str, usize)> = Vec::new();
+    stack.push((start, 0));
+    state.insert(start, 1);
+
+    while let Some(&mut (name, ref mut cursor)) = stack.last_mut() {
+        let deps = adj.get(name).copied().unwrap_or(&[]);
+        if *cursor >= deps.len() {
+            // Done with this node — finalise + pop.
+            state.insert(name, 2);
+            stack.pop();
+            continue;
+        }
+        let dep = &deps[*cursor];
+        *cursor += 1;
+
+        // Look up the `&'a str` key that lives in `adj` so the lifetime
+        // bound on `state` is preserved. validate() already ensured the
+        // dep exists; the lookup miss path is purely defensive.
+        let Some(&dep_static) = adj.get_key_value(dep.as_str()).map(|(k, _)| k) else {
+            return Err(Error::InvalidInput(format!("node '{dep}' not found")));
+        };
+        match state.get(dep_static).copied().unwrap_or(0) {
+            1 => {
+                return Err(Error::InvalidInput(format!(
+                    "circular dependency detected involving node '{dep_static}'"
+                )));
             }
+            0 => {
+                state.insert(dep_static, 1);
+                stack.push((dep_static, 0));
+            }
+            _ => {}
         }
     }
-    state.insert(name, 2);
     Ok(())
 }
 
@@ -305,6 +325,31 @@ mod tests {
             Err(Error::InvalidInput(msg)) => assert!(msg.contains("circular")),
             other => panic!("expected InvalidInput, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn deep_chain_validates_without_stack_overflow() {
+        // 10_000-node linear chain — would blow the thread stack with a
+        // recursive DFS. The iterative implementation must handle it.
+        let mut nodes: Vec<DAGNode<Task>> = Vec::with_capacity(10_000);
+        for i in 0..10_000 {
+            let deps = if i == 0 {
+                vec![]
+            } else {
+                vec![format!("n{}", i - 1)]
+            };
+            nodes.push(DAGNode {
+                name: format!("n{i}"),
+                input: Task { ok: true },
+                dependencies: deps,
+            });
+        }
+        let d = DAGInput {
+            nodes,
+            fail_fast: false,
+            max_parallel: 0,
+        };
+        d.validate().expect("deep chain validates");
     }
 
     #[test]

@@ -48,7 +48,7 @@ let result: MyResult = execute(MyTask { name: "demo".into() }, |task| async move
 
 ### Pipeline (sequential)
 
-```rust,ignore
+```rust,no_run
 let input = PipelineInput {
     tasks: vec![step_a, step_b, step_c],
     stop_on_error: true,
@@ -59,7 +59,7 @@ let out: PipelineOutput<StepResult> = pipeline(input, dispatch).await?;
 
 ### Parallel
 
-```rust,ignore
+```rust,no_run
 let input = ParallelInput {
     tasks: vec![worker_1, worker_2, worker_3],
     failure_strategy: FailureStrategy::FailFast,
@@ -69,7 +69,7 @@ let out: ParallelOutput<StepResult> = parallel(input, dispatch).await?;
 
 ### Loop (per-item)
 
-```rust,ignore
+```rust,no_run
 use std::sync::Arc;
 
 let substitutor: Substitutor<MyTask> = Arc::new(|template, item, index, _params| {
@@ -88,7 +88,7 @@ let out: LoopOutput<MyResult> = run_loop(input, substitutor, dispatch).await?;
 
 ### Parameterized loop (cartesian product)
 
-```rust,ignore
+```rust,no_run
 let mut params = std::collections::HashMap::new();
 params.insert("region".into(), vec!["us-east-1".into(), "eu-west-1".into()]);
 params.insert("tier".into(),   vec!["standard".into(), "premium".into()]);
@@ -103,7 +103,7 @@ let out = parameterized_loop(input, substitutor, dispatch).await?; // 4 iteratio
 
 ### DAG
 
-```rust,ignore
+```rust,no_run
 let input = DAGInput {
     nodes: vec![
         DAGNode { name: "build".into(),  input: build_task,  dependencies: vec![] },
@@ -119,9 +119,68 @@ let out: DAGOutput<StepResult> = run_dag(input, dispatch).await?;
 
 The DAG runner dispatches in topological layers — independent nodes in a layer run in parallel.
 
-## Plugging into a Temporal workflow
+## Workflow context and closure bounds
+
+The patterns are SDK-agnostic, but they bind the dispatch closure
+differently depending on whether work runs sequentially or in
+parallel:
+
+| Pattern | Closure bound | Reason |
+|---|---|---|
+| `execute` / `execute_with_timeout` / `pipeline` | `FnMut(I) -> Future<O>` | Closure runs one at a time; mutable state allowed. |
+| `parallel` / `run_loop` / `parameterized_loop` / `run_dag` | `Fn(I) -> Future<O>` | Closure is reused across many in-flight futures (`join_all`). Capture via `Arc<Mutex<_>>` if you need mutation. |
+
+When you call a `Fn`-bound pattern from inside a `#[run]` method, the
+SDK gives you `ctx: &mut WorkflowContext<Self>` — a *mutable* reference,
+which can't be captured into an `Fn` closure. The fix is a one-line
+shared reborrow:
 
 ```rust,ignore
+// Inside #[workflow_methods] impl ... { #[run] pub async fn run(ctx: &mut WorkflowContext<Self>, ...) }
+let ctx_ref: &WorkflowContext<Self> = ctx;     // <-- the reborrow
+let opts = altair_wf::default_activity_options();
+
+let out = altair_wf::parallel(input, |step| {
+    let opts = opts.clone();
+    async move {
+        ctx_ref
+            .start_activity(EchoActivities::echo, step, opts)
+            .await
+            .map_err(|e| altair_wf::Error::Activity {
+                activity: "EchoActivities::echo".into(),
+                source: Box::new(e),
+            })
+    }
+})
+.await?;
+```
+
+`WorkflowContext::start_activity` takes `&self`, so reborrowing as
+shared is sound — the closure cannot outlive the workflow scope.
+
+## Prelude gotcha: `Result<T>` shadowing
+
+The crate prelude re-exports `Result<T>` as `altair_wf::Result<T>` (a
+1-arg alias). The Temporal SDK's `#[activity]` and `#[workflow_methods]`
+macros expand to code containing `Result<T, ActivityError>` (two
+arguments). If both are in scope at the same site, the prelude's alias
+**swallows the second generic** and the compiler emits
+`type alias takes 1 generic argument but 2 were supplied`.
+
+The safe pattern, used by this crate's own integration tests:
+
+```rust,no_run
+// In a module that hosts #[activity] or #[workflow_methods]:
+use altair_wf::{PipelineInput, PipelineOutput, pipeline, TaskInput, TaskOutput};
+// (skip `use altair_wf::prelude::*;`)
+```
+
+The prelude itself is fine for code that doesn't host the SDK macros
+(plain helper modules, examples, scripts).
+
+## Plugging into a Temporal workflow
+
+```rust,no_run
 use altair_temporal::prelude::*;
 use altair_wf::prelude::*;
 
