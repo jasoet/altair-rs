@@ -41,5 +41,12 @@ pub use config::ClientBuilder;
 pub use error::{Error, Result};
 
 // Re-exports for one-dep ergonomics
+pub use ::http;
 pub use ::reqwest;
 pub use ::reqwest_middleware;
+pub use ::url;
+
+// Commonly-needed http/reqwest types lifted to the crate root so
+// consumers don't write `altair_rest::http::HeaderMap` every time.
+pub use ::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
+pub use ::reqwest::Response;
