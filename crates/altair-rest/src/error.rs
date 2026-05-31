@@ -31,6 +31,17 @@ pub enum Error {
     /// [`crate::ClientBuilder::default_header`]).
     #[error("invalid header: {0}")]
     InvalidHeader(String),
+
+    /// Response body exceeded the configured
+    /// [`crate::ClientBuilder::response_body_limit`] before decoding.
+    /// Mitigates OOM from a rogue endpoint streaming gigabytes.
+    #[error("response body too large: {received} bytes received, limit {limit} bytes")]
+    ResponseTooLarge {
+        /// How many bytes had been read before the limit was hit.
+        received: u64,
+        /// The configured cap.
+        limit: u64,
+    },
 }
 
 /// Convenience result alias for this crate.
