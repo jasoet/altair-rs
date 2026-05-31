@@ -5,6 +5,14 @@ git_release_enable = true
 git_tag_enable = true
 publish = true
 publish_allow_dirty = false
+# Skip cargo publish's package-verification step. Required for our
+# cross-crate dev-deps (e.g. altair-concurrent dev-depends on altair-otel
+# = "0.x"): when bumping all crates to a new major together, the sibling
+# version doesn't exist on crates.io yet at the moment the first crate
+# tries to publish. The verification fails even though the upload itself
+# would have worked once siblings catch up. cargo publish --no-verify
+# uploads anyway; the sibling resolves once published.
+publish_no_verify = true
 git_release_type = "auto"
 semver_check = true
 
