@@ -101,6 +101,26 @@ sqlx_slow_query_threshold = "1s"
 
 Every field has a sensible default; only `url` is required.
 
+## Integration tests
+
+`tests/postgres.rs`, `tests/mysql.rs`, and `tests/sqlite.rs` exercise each
+backend end-to-end. The Postgres + MySQL tests use
+[`testcontainers-modules`](https://docs.rs/testcontainers-modules) to spin
+up real databases — Docker required. SQLite tests run in-memory and have
+no external dependency.
+
+```bash
+task test:integration:db
+```
+
+Or directly:
+
+```bash
+cargo test -p altair-db --tests --all-features -- --test-threads=1
+```
+
+Postgres tests take ~20s, MySQL ~50s (container boot), SQLite milliseconds.
+
 ## License
 
 Apache-2.0

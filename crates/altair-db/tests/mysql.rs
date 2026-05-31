@@ -1,9 +1,6 @@
-//! `MySQL` integration via testcontainers.
-//!
-//! Skipped on non-Linux for the same Docker-availability reason as
-//! Postgres tests.
+//! `MySQL` integration via testcontainers. Requires Docker.
 
-#![cfg(all(feature = "mysql", target_os = "linux"))]
+#![cfg(feature = "mysql")]
 
 use altair_db::prelude::*;
 use sea_orm::{ConnectionTrait, Statement};

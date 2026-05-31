@@ -1,9 +1,6 @@
-//! Postgres integration via testcontainers.
-//!
-//! Skipped on non-Linux because Docker availability is unreliable on
-//! macOS/Windows CI runners.
+//! Postgres integration via testcontainers. Requires Docker.
 
-#![cfg(all(feature = "postgres", target_os = "linux"))]
+#![cfg(feature = "postgres")]
 
 use altair_db::prelude::*;
 use sea_orm::{ConnectionTrait, Statement};
