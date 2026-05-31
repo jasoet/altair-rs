@@ -233,6 +233,7 @@ impl TemporalContainerBuilder {
 
 /// Errors raised by [`TemporalContainer`].
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum TestcontainerError {
     /// The container failed to start (Docker unreachable, image missing,
     /// timeout waiting for the readiness log line, etc.).

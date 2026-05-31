@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors returned by `altair-compress` recipes.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// I/O failure during read/write (open, seek, copy, etc.). Most underlying
     /// `flate2` and `tar` failures surface here via the `#[from]` conversion.

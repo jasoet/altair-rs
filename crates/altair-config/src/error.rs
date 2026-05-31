@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors returned by config loaders.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// I/O error while reading a config file.
     #[error("config I/O: {0}")]

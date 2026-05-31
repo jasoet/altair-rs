@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors returned by `altair-base32` decode operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Input contains a character not in the Crockford alphabet (after lenient
     /// normalization for `I`/`L`/`O` and hyphen-stripping).
