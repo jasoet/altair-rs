@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors from [`crate::Config::init`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Failed to build the OTLP exporter or tracer/meter/logger provider.
     #[error("otel exporter: {0}")]

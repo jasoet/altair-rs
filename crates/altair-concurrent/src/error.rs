@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors returned by [`crate::execute_concurrently`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// A task returned an error; remaining tasks were cancelled.
     #[error("task '{name}' failed: {source}")]

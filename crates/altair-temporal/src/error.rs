@@ -13,6 +13,7 @@ pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// All errors that may surface from `altair-temporal`.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Could not establish a gRPC connection to the Temporal server.
     #[error("failed to connect to temporal at {host}")]

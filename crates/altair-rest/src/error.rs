@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors returned by `altair-rest` operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Middleware-chain failure — the typical retry-exhausted / network-error
     /// path. Wraps a `reqwest_middleware::Error`.

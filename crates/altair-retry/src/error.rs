@@ -6,6 +6,7 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 /// Errors returned by [`crate::retry`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// All retry attempts exhausted; final attempt's error is preserved.
     #[error("retry '{name}' exhausted after {attempts} attempts: {source}")]

@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors returned by `altair-server` operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Failed to bind the TCP listener.
     #[error("failed to bind {addr}: {source}")]

@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// All errors that may surface from `altair-db`.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Could not establish a connection to the database.
     #[error("failed to connect to database")]
