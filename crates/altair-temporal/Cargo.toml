@@ -55,9 +55,10 @@ testcontainers-modules = { workspace = true }
 futures = { workspace = true }
 futures-util = "0.3"
 serde = { workspace = true }
-# Sibling crates for examples only.
-altair-otel = { path = "../altair-otel", version = "0.2" }
-altair-config = { path = "../altair-config", version = "0.2" }
+# Sibling crates for examples only. Path-only — cargo publish strips
+# them; avoids cross-crate version cycles on major bumps.
+altair-otel = { path = "../altair-otel" }
+altair-config = { path = "../altair-config" }
 
 [lints]
 workspace = true

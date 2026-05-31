@@ -25,8 +25,11 @@ pretty_assertions = { workspace = true }
 assert_matches = { workspace = true }
 anyhow = { workspace = true }
 tracing-subscriber = { workspace = true }
-# Sibling crate for the with_otel example only.
-altair-otel = { path = "../altair-otel", version = "0.2" }
+# Sibling crate for the with_otel example only. Path-only (no version)
+# so cargo publish strips it from the published Cargo.toml — avoids the
+# chicken-and-egg lockfile resolve when all altair-* crates bump majors
+# together.
+altair-otel = { path = "../altair-otel" }
 
 [lints]
 workspace = true

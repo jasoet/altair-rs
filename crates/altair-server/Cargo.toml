@@ -30,8 +30,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 http = "1"
 tower = { workspace = true, features = ["util"] }
-# Sibling crate for the with_otel example only.
-altair-otel = { path = "../altair-otel", version = "0.2" }
+# Sibling crate for the with_otel example only. Path-only — cargo
+# publish strips it; avoids cross-crate version cycles on major bumps.
+altair-otel = { path = "../altair-otel" }
 
 [lints]
 workspace = true
