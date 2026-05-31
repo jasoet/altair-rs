@@ -31,6 +31,7 @@ categories = ["asynchronous", "development-tools"]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 futures = "0.3"
+async-trait = "0.1"
 
 # Errors
 thiserror = "2"

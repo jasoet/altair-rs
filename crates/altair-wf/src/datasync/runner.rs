@@ -1,0 +1,176 @@
+//! In-process runner: drives a single source -> mapper -> sink cycle
+//! with no Temporal coupling. Useful for tests, scripts, and quick
+//! prototypes.
+
+use std::sync::Arc;
+use std::time::Instant;
+
+use crate::datasync::mapper::Mapper;
+use crate::datasync::result::SyncResult;
+use crate::datasync::sink::Sink;
+use crate::datasync::source::Source;
+use crate::error::{Error, Result};
+
+/// Drives a single fetch-map-write cycle in the current process.
+///
+/// Use for testing, in-process tools, and to validate the source/mapper/sink
+/// trio before wrapping it in a Temporal workflow. Errors at any step are
+/// returned with the source/sink name in their context.
+pub struct Runner<T, U>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
+    source: Arc<dyn Source<T>>,
+    mapper: Arc<dyn Mapper<T, U>>,
+    sink: Arc<dyn Sink<U>>,
+}
+
+impl<T, U> Runner<T, U>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
+    /// Build a new runner wrapping the given trio.
+    #[must_use]
+    pub fn new(
+        source: Arc<dyn Source<T>>,
+        mapper: Arc<dyn Mapper<T, U>>,
+        sink: Arc<dyn Sink<U>>,
+    ) -> Self {
+        Self {
+            source,
+            mapper,
+            sink,
+        }
+    }
+
+    /// Run one fetch-map-write cycle. Returns a [`SyncResult`] with the
+    /// fetch count, sink tally, and wall-clock processing time.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::Activity`] wrapping the source name if `fetch` fails.
+    /// - [`Error::PatternStopped`] wrapping the mapper context if `map`
+    ///   fails.
+    /// - [`Error::Activity`] wrapping the sink name if `write` fails.
+    pub async fn run(&self) -> Result<SyncResult> {
+        let started = Instant::now();
+
+        let records = self
+            .source
+            .fetch()
+            .await
+            .map_err(|e| Error::activity(format!("source {}: fetch", self.source.name()), e))?;
+
+        let mut result = SyncResult {
+            total_fetched: records.len(),
+            ..SyncResult::default()
+        };
+
+        if records.is_empty() {
+            result.processing_time = started.elapsed();
+            return Ok(result);
+        }
+
+        let mapped = self
+            .mapper
+            .map(records)
+            .await
+            .map_err(|e| Error::PatternStopped {
+                position: "mapper".to_string(),
+                reason: e.to_string(),
+            })?;
+
+        let write_result = self
+            .sink
+            .write(mapped)
+            .await
+            .map_err(|e| Error::activity(format!("sink {}: write", self.sink.name()), e))?;
+
+        result.write_result = write_result;
+        result.processing_time = started.elapsed();
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::datasync::mapper::IdentityMapper;
+    use crate::datasync::sink::WriteResult;
+    use async_trait::async_trait;
+
+    struct VecSource(Vec<i32>);
+    #[async_trait]
+    impl Source<i32> for VecSource {
+        fn name(&self) -> &'static str {
+            "vec"
+        }
+        async fn fetch(&self) -> Result<Vec<i32>> {
+            Ok(self.0.clone())
+        }
+    }
+
+    struct CountingSink {
+        inner: std::sync::Mutex<Vec<i32>>,
+    }
+    #[async_trait]
+    impl Sink<i32> for CountingSink {
+        fn name(&self) -> &'static str {
+            "count"
+        }
+        async fn write(&self, records: Vec<i32>) -> Result<WriteResult> {
+            let mut g = self.inner.lock().unwrap();
+            let n = records.len();
+            g.extend(records);
+            Ok(WriteResult {
+                inserted: n,
+                ..WriteResult::default()
+            })
+        }
+    }
+
+    struct EmptySource;
+    #[async_trait]
+    impl Source<i32> for EmptySource {
+        fn name(&self) -> &'static str {
+            "empty"
+        }
+        async fn fetch(&self) -> Result<Vec<i32>> {
+            Ok(vec![])
+        }
+    }
+
+    #[tokio::test]
+    async fn runner_executes_fetch_map_write() {
+        let sink = Arc::new(CountingSink {
+            inner: std::sync::Mutex::new(Vec::new()),
+        });
+        let runner: Runner<i32, i32> = Runner::new(
+            Arc::new(VecSource(vec![1, 2, 3])),
+            Arc::new(IdentityMapper::new()),
+            sink.clone(),
+        );
+        let out = runner.run().await.unwrap();
+        assert_eq!(out.total_fetched, 3);
+        assert_eq!(out.write_result.inserted, 3);
+        assert_eq!(*sink.inner.lock().unwrap(), vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn runner_short_circuits_on_empty_fetch() {
+        let sink = Arc::new(CountingSink {
+            inner: std::sync::Mutex::new(Vec::new()),
+        });
+        let runner: Runner<i32, i32> = Runner::new(
+            Arc::new(EmptySource),
+            Arc::new(IdentityMapper::new()),
+            sink.clone(),
+        );
+        let out = runner.run().await.unwrap();
+        assert_eq!(out.total_fetched, 0);
+        assert_eq!(out.write_result.total(), 0);
+        assert!(sink.inner.lock().unwrap().is_empty());
+    }
+}

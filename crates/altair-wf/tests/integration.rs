@@ -1017,3 +1017,338 @@ async fn function_parallel_fail_fast_fails_workflow_on_handler_unsuccessful_outp
         "expected PatternStopped to carry handler error: {msg}",
     );
 }
+
+// ---------------------------------------------------------------------------
+// Datasync module (Phase 3): chunked_sync_run helper driving a real
+// Temporal workflow with list-partitions / run-partition activities,
+// plus optional cursor + continue-as-new.
+// ---------------------------------------------------------------------------
+
+use altair_wf::datasync::chunk::{
+    ChunkedSyncConfig, Cursor, Partition, PartitionResult, SyncResult, chunked_sync_run,
+};
+
+// In-memory shared state for the datasync activities. Captures the
+// partition list, the records each partition would yield, the cursor,
+// and a per-partition fetch counter so assertions can verify dispatch.
+#[derive(Default)]
+pub struct DatasyncState {
+    pub partitions: Vec<Partition<i64>>,
+    pub records_per_partition: HashMap<i64, usize>,
+    pub cursor: std::sync::Mutex<Option<i64>>,
+    pub fetch_calls: std::sync::Mutex<Vec<i64>>,
+    pub advance_calls: std::sync::Mutex<Vec<i64>>,
+}
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+pub struct DatasyncActivities {
+    pub state: Arc<DatasyncState>,
+}
+
+#[activities]
+impl DatasyncActivities {
+    #[activity]
+    pub async fn list_partitions(
+        self: Arc<Self>,
+        _ctx: ActivityContext,
+    ) -> std::result::Result<Vec<Partition<i64>>, ActivityError> {
+        Ok(self.state.partitions.clone())
+    }
+
+    #[activity]
+    pub async fn run_partition(
+        self: Arc<Self>,
+        _ctx: ActivityContext,
+        p: Partition<i64>,
+    ) -> std::result::Result<PartitionResult<i64>, ActivityError> {
+        self.state.fetch_calls.lock().unwrap().push(p.start);
+        let n = self
+            .state
+            .records_per_partition
+            .get(&p.start)
+            .copied()
+            .unwrap_or(0);
+        Ok(PartitionResult {
+            start: p.start,
+            end: p.end,
+            fetched: n,
+            inserted: n,
+            updated: 0,
+            skipped: 0,
+        })
+    }
+
+    #[activity]
+    pub async fn read_cursor(
+        self: Arc<Self>,
+        _ctx: ActivityContext,
+        _job: String,
+    ) -> std::result::Result<Option<i64>, ActivityError> {
+        Ok(*self.state.cursor.lock().unwrap())
+    }
+
+    #[activity]
+    pub async fn advance_cursor(
+        self: Arc<Self>,
+        _ctx: ActivityContext,
+        end: i64,
+    ) -> std::result::Result<(), ActivityError> {
+        self.state.advance_calls.lock().unwrap().push(end);
+        *self.state.cursor.lock().unwrap() = Some(end);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DatasyncInput {
+    pub job: String,
+    pub use_cursor: bool,
+    pub max_per_exec: usize,
+}
+impl TaskInput for DatasyncInput {}
+
+#[workflow]
+#[derive(Default)]
+pub struct DatasyncWf;
+
+#[workflow_methods]
+impl DatasyncWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: DatasyncInput,
+    ) -> WorkflowResult<SyncResult<i64>> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+
+        let list_opts = opts.clone();
+        let list = || {
+            let list_opts = list_opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(DatasyncActivities::list_partitions, (), list_opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::activity("list_partitions", e))
+            }
+        };
+
+        let run_opts = opts.clone();
+        let run = move |p: Partition<i64>| {
+            let run_opts = run_opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(DatasyncActivities::run_partition, p, run_opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::activity("run_partition", e))
+            }
+        };
+
+        let job_name = input.job.clone();
+        let read_opts = opts.clone();
+        let adv_opts = opts.clone();
+        let cursor = if input.use_cursor {
+            Cursor::Some {
+                read: {
+                    let job_name = job_name.clone();
+                    move || {
+                        let read_opts = read_opts.clone();
+                        let job_name = job_name.clone();
+                        async move {
+                            ctx_ref
+                                .start_activity(
+                                    DatasyncActivities::read_cursor,
+                                    job_name,
+                                    read_opts,
+                                )
+                                .await
+                                .map_err(|e| altair_wf::Error::activity("read_cursor", e))
+                        }
+                    }
+                },
+                advance: move |end: i64| {
+                    let adv_opts = adv_opts.clone();
+                    async move {
+                        ctx_ref
+                            .start_activity(DatasyncActivities::advance_cursor, end, adv_opts)
+                            .await
+                            .map_err(|e| altair_wf::Error::activity("advance_cursor", e))
+                    }
+                },
+            }
+        } else {
+            Cursor::None
+        };
+
+        let cfg =
+            ChunkedSyncConfig::new(&input.job).max_partitions_per_execution(input.max_per_exec);
+
+        let result = chunked_sync_run(cfg, list, run, cursor, |_d| async {})
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+async fn build_datasync_worker(tq: &str, state: Arc<DatasyncState>) -> altair_temporal::Worker {
+    let temporal = temporal().await;
+    let cfg = temporal.config(tq);
+    WorkerBuilder::new(&cfg)
+        .register_workflow::<DatasyncWf>()
+        .register_activities(DatasyncActivities { state })
+        .build()
+        .await
+        .expect("build worker")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn datasync_chunked_run_without_cursor_visits_every_partition() {
+    let mut records = HashMap::new();
+    records.insert(0_i64, 5);
+    records.insert(10_i64, 3);
+    records.insert(20_i64, 7);
+    let state = Arc::new(DatasyncState {
+        partitions: vec![
+            Partition::new(0_i64, 10),
+            Partition::new(10, 20),
+            Partition::new(20, 30),
+        ],
+        records_per_partition: records,
+        ..DatasyncState::default()
+    });
+
+    let tq = unique("wf-ds-no-cursor");
+    let worker = build_datasync_worker(&tq, state.clone()).await;
+    let client = temporal_client().await;
+    let wf_id = unique("ds-no-cursor-wid");
+    let tq_clone = tq.clone();
+    let cap_state = state.clone();
+
+    let workload = async move {
+        let input = DatasyncInput {
+            job: "ds-1".into(),
+            use_cursor: false,
+            max_per_exec: 0,
+        };
+        let handle = client
+            .start_workflow(
+                DatasyncWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: SyncResult<i64> = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.job_name, "ds-1");
+    assert_eq!(out.total_partitions, 3);
+    assert_eq!(out.total_fetched, 5 + 3 + 7);
+    assert_eq!(out.total_inserted, 5 + 3 + 7);
+    assert!(!out.deferred);
+    assert_eq!(*cap_state.fetch_calls.lock().unwrap(), vec![0, 10, 20],);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn datasync_chunked_run_with_cursor_skips_processed_partitions() {
+    let mut records = HashMap::new();
+    records.insert(0_i64, 1);
+    records.insert(10_i64, 2);
+    records.insert(20_i64, 3);
+    let state = Arc::new(DatasyncState {
+        partitions: vec![
+            Partition::new(0_i64, 10),
+            Partition::new(10, 20),
+            Partition::new(20, 30),
+        ],
+        records_per_partition: records,
+        cursor: std::sync::Mutex::new(Some(15_i64)),
+        ..DatasyncState::default()
+    });
+
+    let tq = unique("wf-ds-cursor");
+    let worker = build_datasync_worker(&tq, state.clone()).await;
+    let client = temporal_client().await;
+    let wf_id = unique("ds-cursor-wid");
+    let tq_clone = tq.clone();
+    let cap_state = state.clone();
+
+    let workload = async move {
+        let input = DatasyncInput {
+            job: "ds-2".into(),
+            use_cursor: true,
+            max_per_exec: 0,
+        };
+        let handle = client
+            .start_workflow(
+                DatasyncWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: SyncResult<i64> = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    // cursor=15 keeps only start>=15, i.e. [20, 30) — 1 partition, 3 records.
+    assert_eq!(out.total_partitions, 1);
+    assert_eq!(out.total_fetched, 3);
+    assert_eq!(out.partitions[0].start, 20);
+    // advance_cursor recorded for the one processed partition.
+    assert_eq!(*cap_state.advance_calls.lock().unwrap(), vec![30]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn datasync_chunked_run_truncates_to_max_and_sets_deferred() {
+    let records: HashMap<i64, usize> = (0..10).map(|i| (i * 10, 1usize)).collect();
+    let state = Arc::new(DatasyncState {
+        partitions: (0..10)
+            .map(|i| Partition::new(i * 10, (i + 1) * 10))
+            .collect(),
+        records_per_partition: records,
+        ..DatasyncState::default()
+    });
+
+    let tq = unique("wf-ds-max");
+    let worker = build_datasync_worker(&tq, state.clone()).await;
+    let client = temporal_client().await;
+    let wf_id = unique("ds-max-wid");
+    let tq_clone = tq.clone();
+    let cap_state = state.clone();
+
+    let workload = async move {
+        let input = DatasyncInput {
+            job: "ds-3".into(),
+            use_cursor: true,
+            max_per_exec: 3,
+        };
+        let handle = client
+            .start_workflow(
+                DatasyncWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: SyncResult<i64> = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.total_partitions, 3);
+    assert!(out.deferred, "expected deferred=true when truncated");
+    // Advance recorded for each of the 3 processed partitions, capturing
+    // their `end` values: 10, 20, 30.
+    assert_eq!(*cap_state.advance_calls.lock().unwrap(), vec![10, 20, 30],);
+}
