@@ -50,10 +50,10 @@ where
     ///
     /// # Errors
     ///
-    /// - [`Error::Activity`] wrapping the source name if `fetch` fails.
-    /// - [`Error::PatternStopped`] wrapping the mapper context if `map`
-    ///   fails.
-    /// - [`Error::Activity`] wrapping the sink name if `write` fails.
+    /// Each stage failure is wrapped as [`Error::Activity`] so the
+    /// taxonomy is symmetric across the trio (fetch, map, write). The
+    /// `activity` field carries the stage label plus the source/sink
+    /// name where applicable.
     pub async fn run(&self) -> Result<SyncResult> {
         let started = Instant::now();
 
@@ -77,10 +77,7 @@ where
             .mapper
             .map(records)
             .await
-            .map_err(|e| Error::PatternStopped {
-                position: "mapper".to_string(),
-                reason: e.to_string(),
-            })?;
+            .map_err(|e| Error::activity("mapper: map".to_string(), e))?;
 
         let write_result = self
             .sink

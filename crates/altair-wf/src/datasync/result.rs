@@ -7,7 +7,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::datasync::sink::WriteResult;
 
-/// Outcome of a single fetch-map-write cycle.
+/// Outcome of a single fetch-map-write cycle as driven by [`Runner`].
+///
+/// **Not** the chunked-workflow summary — see
+/// [`crate::datasync::chunk::SyncResult`] (re-exported via the prelude
+/// as `ChunkSyncResult`) for the partition-aware summary returned by
+/// [`crate::datasync::chunk::chunked_sync_run`].
+///
+/// [`Runner`]: crate::datasync::Runner
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SyncResult {
     /// Records returned by [`Source::fetch`](crate::datasync::Source::fetch).
@@ -71,14 +78,18 @@ mod tests {
             processing_time: Duration::from_millis(1500),
         };
         let value = serde_json::to_value(&original).unwrap();
-        // Duration encoded as a bare millis u64.
+        // Wire format is snake_case (default serde derive); the
+        // duration encodes as a bare millis u64.
         assert_eq!(
             value
-                .get("processingTime")
-                .or_else(|| value.get("processing_time"))
+                .get("processing_time")
                 .and_then(serde_json::Value::as_u64),
             Some(1500)
         );
+        // The crate does NOT enable camelCase; the wrong key must
+        // be absent so a downstream Go reader (or anyone else parsing
+        // the wire format) sees a single canonical name.
+        assert!(value.get("processingTime").is_none());
         let back: SyncResult = serde_json::from_value(value).unwrap();
         assert_eq!(back.total_fetched, 42);
         assert_eq!(back.write_result.inserted, 30);

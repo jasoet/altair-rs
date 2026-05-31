@@ -25,9 +25,13 @@ where
     async fn map(&self, records: Vec<T>) -> Result<Vec<U>>;
 }
 
-/// Extension of [`Mapper`] that exposes a synchronous, skip-tracking
-/// variant. Default `map` impl forwards to `map_detailed` and drops the
-/// skip metadata.
+/// Sibling trait of [`Mapper`] that exposes a synchronous,
+/// skip-tracking variant. Not a supertrait — implementations of
+/// `DetailedMapper` typically also `impl Mapper<T, U>` separately
+/// (see [`RecordMapper`] for the reference shape). A blanket impl
+/// (`impl<M: DetailedMapper> Mapper for M`) would create coherence
+/// issues for downstream types that need both, so the duplication is
+/// intentional.
 pub trait DetailedMapper<T, U>: Send + Sync
 where
     T: Send + 'static,
