@@ -354,8 +354,8 @@ where
 /// in a wave runs in parallel. Aborts on first failure if
 /// `input.fail_fast` is set.
 ///
-/// Named `run_dag` (not `dag`) so it doesn't collide with the
-/// [`crate::dag`] module that owns the input/output types.
+/// Named `run_dag` (not `dag`) so it doesn't collide with the internal
+/// `dag` module that owns the input/output types.
 pub async fn run_dag<F, Fut, I, O>(input: DAGInput<I>, execute_one: F) -> Result<DAGOutput<O>>
 where
     I: TaskInput + Clone,
