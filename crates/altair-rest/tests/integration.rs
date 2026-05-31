@@ -1,5 +1,7 @@
 //! End-to-end behaviour tests using wiremock as an in-process HTTP server.
 
+#![allow(tail_expr_drop_order)]
+
 use altair_rest::prelude::*;
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
@@ -157,6 +159,157 @@ async fn bearer_token_is_applied() {
 
     let response = client.get("/secure").send().await.unwrap();
     assert_eq!(response.status(), 200);
+}
+
+#[tokio::test]
+async fn put_json_round_trip() {
+    let server = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .and(path("/users/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(User {
+            id: 1,
+            name: "alice".into(),
+        }))
+        .mount(&server)
+        .await;
+
+    let client = Client::builder()
+        .base_url(&server.uri())
+        .unwrap()
+        .build()
+        .unwrap();
+
+    let updated: User = client
+        .put_json(
+            "/users/1",
+            &User {
+                id: 1,
+                name: "alice".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.name, "alice");
+}
+
+#[tokio::test]
+async fn patch_json_round_trip() {
+    let server = MockServer::start().await;
+    Mock::given(method("PATCH"))
+        .and(path("/users/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(User {
+            id: 1,
+            name: "alicia".into(),
+        }))
+        .mount(&server)
+        .await;
+
+    let client = Client::builder()
+        .base_url(&server.uri())
+        .unwrap()
+        .build()
+        .unwrap();
+
+    let patched: User = client
+        .patch_json("/users/1", &serde_json::json!({ "name": "alicia" }))
+        .await
+        .unwrap();
+    assert_eq!(patched.name, "alicia");
+}
+
+#[tokio::test]
+async fn get_json_rejects_oversized_response() {
+    let server = MockServer::start().await;
+    // 2 KiB body, but client caps at 512 bytes.
+    let big = serde_json::json!({"payload": "x".repeat(2048)});
+    Mock::given(method("GET"))
+        .and(path("/big"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(big))
+        .mount(&server)
+        .await;
+
+    let client = Client::builder()
+        .base_url(&server.uri())
+        .unwrap()
+        .response_body_limit(512)
+        .build()
+        .unwrap();
+
+    let err = client
+        .get_json::<serde_json::Value>("/big")
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::ResponseTooLarge { .. }),
+        "expected ResponseTooLarge, got {err:?}",
+    );
+}
+
+#[tokio::test]
+async fn max_redirects_zero_rejects_redirect() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/redir"))
+        .respond_with(ResponseTemplate::new(302).insert_header("location", "/elsewhere"))
+        .mount(&server)
+        .await;
+    // /elsewhere never matches because the client must not follow.
+
+    let client = Client::builder()
+        .base_url(&server.uri())
+        .unwrap()
+        .max_redirects(0)
+        .build()
+        .unwrap();
+
+    let response = client.get("/redir").send().await.unwrap();
+    assert_eq!(response.status(), 302, "should not follow when max=0");
+}
+
+#[tokio::test]
+async fn delete_request_works() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/users/1"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+
+    let client = Client::builder()
+        .base_url(&server.uri())
+        .unwrap()
+        .build()
+        .unwrap();
+
+    let response = client.delete("/users/1").send().await.unwrap();
+    assert_eq!(response.status(), 204);
+}
+
+#[tokio::test]
+async fn concurrent_requests_succeed_independently() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/ping"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+        .mount(&server)
+        .await;
+
+    let client = Client::builder()
+        .base_url(&server.uri())
+        .unwrap()
+        .build()
+        .unwrap();
+
+    let handles: Vec<_> = (0..16)
+        .map(|_| {
+            let c = client.clone();
+            tokio::spawn(async move { c.get("/ping").send().await.map(|r| r.status().as_u16()) })
+        })
+        .collect();
+
+    for h in handles {
+        assert_eq!(h.await.unwrap().unwrap(), 200);
+    }
 }
 
 #[tokio::test]
