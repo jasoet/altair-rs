@@ -15,6 +15,7 @@ pub struct Client {
     base_url: Option<Url>,
     bearer_token: Option<String>,
     basic_auth: Option<(String, Option<String>)>,
+    pub(crate) response_body_limit: u64,
 }
 
 impl Client {
@@ -29,12 +30,14 @@ impl Client {
         base_url: Option<Url>,
         bearer_token: Option<String>,
         basic_auth: Option<(String, Option<String>)>,
+        response_body_limit: u64,
     ) -> Self {
         Self {
             inner,
             base_url,
             bearer_token,
             basic_auth,
+            response_body_limit,
         }
     }
 

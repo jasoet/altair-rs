@@ -15,6 +15,10 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_RETRY_INITIAL: Duration = Duration::from_millis(100);
 const DEFAULT_RETRY_MAX: Duration = Duration::from_secs(5);
 const DEFAULT_RETRY_ATTEMPTS: u32 = 3;
+const DEFAULT_MAX_REDIRECTS: usize = 10;
+/// 16 MiB. Bounds response bodies decoded by the JSON helpers so a
+/// rogue endpoint streaming gigabytes can't OOM the process.
+pub(crate) const DEFAULT_RESPONSE_BODY_LIMIT: u64 = 16 * 1024 * 1024;
 const DEFAULT_USER_AGENT: &str = concat!("altair-rest/", env!("CARGO_PKG_VERSION"));
 
 /// Typed builder for [`Client`].
@@ -32,6 +36,8 @@ pub struct ClientBuilder {
     retry_max_attempts: u32,
     retry_initial_interval: Duration,
     retry_max_interval: Duration,
+    max_redirects: usize,
+    response_body_limit: u64,
     enable_tracing: bool,
     reqwest_customize:
         Option<Box<dyn FnOnce(reqwest::ClientBuilder) -> reqwest::ClientBuilder + Send>>,
@@ -53,6 +59,8 @@ impl Default for ClientBuilder {
             retry_max_attempts: DEFAULT_RETRY_ATTEMPTS,
             retry_initial_interval: DEFAULT_RETRY_INITIAL,
             retry_max_interval: DEFAULT_RETRY_MAX,
+            max_redirects: DEFAULT_MAX_REDIRECTS,
+            response_body_limit: DEFAULT_RESPONSE_BODY_LIMIT,
             enable_tracing: true,
             reqwest_customize: None,
             extra_middleware: Vec::new(),
@@ -68,6 +76,17 @@ impl ClientBuilder {
 
     /// Set the base URL for relative path resolution. Must end with a `/` if
     /// you want subpaths to nest underneath; e.g. `"https://api.example.com/v1/"`.
+    ///
+    /// # Security note
+    ///
+    /// `base_url` is a **convenience for relative path joins**, not an access
+    /// control boundary. Per RFC 3986, passing an absolute URL to a verb
+    /// method (e.g. `.get("https://other.example.com/x")`) overrides the
+    /// base entirely; a protocol-relative URL like `//other.example.com/x`
+    /// switches the host while keeping the scheme; and `../` segments
+    /// normalise the resulting path and can escape upwards. If you need
+    /// strict host confinement, validate URLs at the call site before
+    /// invoking the verb method.
     pub fn base_url(mut self, url: &str) -> Result<Self> {
         let parsed = Url::parse(url)?;
         self.base_url = Some(parsed);
@@ -142,6 +161,32 @@ impl ClientBuilder {
         self
     }
 
+    /// Maximum redirects to follow. `0` disables redirect following entirely.
+    /// Default 10 (matching reqwest's default).
+    ///
+    /// Redirects can be a cross-origin SSRF vector — a 302 from an
+    /// attacker-controlled endpoint to `http://internal.service/` will be
+    /// followed silently. Drop this to a small number (or 0) when calling
+    /// untrusted origins.
+    pub fn max_redirects(mut self, n: usize) -> Self {
+        self.max_redirects = n;
+        self
+    }
+
+    /// Maximum response body size accepted by the JSON helpers
+    /// ([`Client::get_json`], [`Client::post_json`], etc.). Bodies
+    /// exceeding this are rejected with [`Error::ResponseTooLarge`]
+    /// **before** they're decoded, so a rogue endpoint streaming
+    /// gigabytes cannot OOM the process.
+    ///
+    /// Default 16 MiB. Does not affect requests issued via the
+    /// `.get(...).send()` chain directly — only the JSON convenience
+    /// helpers enforce the cap.
+    pub fn response_body_limit(mut self, bytes: u64) -> Self {
+        self.response_body_limit = bytes;
+        self
+    }
+
     /// Escape hatch: customize the underlying `reqwest::ClientBuilder`.
     pub fn with_reqwest_builder<F>(mut self, customize: F) -> Self
     where
@@ -164,9 +209,15 @@ impl ClientBuilder {
     /// Build the configured [`Client`].
     pub fn build(self) -> Result<Client> {
         // 1) Construct the inner reqwest client.
+        let redirect_policy = if self.max_redirects == 0 {
+            reqwest::redirect::Policy::none()
+        } else {
+            reqwest::redirect::Policy::limited(self.max_redirects)
+        };
         let mut reqwest_builder = reqwest::ClientBuilder::new()
             .timeout(self.timeout)
             .connect_timeout(self.connect_timeout)
+            .redirect(redirect_policy)
             .default_headers(self.headers.clone());
 
         if let Some(customize) = self.reqwest_customize {
@@ -200,6 +251,7 @@ impl ClientBuilder {
             self.base_url,
             self.bearer_token,
             self.basic_auth,
+            self.response_body_limit,
         ))
     }
 }
