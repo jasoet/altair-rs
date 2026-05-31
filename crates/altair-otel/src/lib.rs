@@ -33,6 +33,9 @@ mod init;
 
 pub mod prelude;
 
+#[cfg(feature = "testcontainers")]
+pub mod testcontainer;
+
 pub use config::{Config, ConfigBuilder, Exporter, LogFormat};
 pub use error::{Error, Result};
 pub use globals::{meter, shutdown};
