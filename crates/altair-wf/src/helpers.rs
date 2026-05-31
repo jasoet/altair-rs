@@ -11,16 +11,15 @@ use altair_temporal::temporalio_sdk::ActivityOptions;
 use crate::traits::TaskInput;
 use crate::types::Substitutor;
 
-/// Default start-to-close timeout for activities (10 minutes).
-pub const DEFAULT_START_TO_CLOSE_MINS: u64 = 10;
-/// Default initial retry interval (1 second).
-pub const DEFAULT_INITIAL_INTERVAL_MS: u64 = 1_000;
-/// Default exponential backoff coefficient (2.0).
-pub const DEFAULT_BACKOFF_COEFFICIENT: f64 = 2.0;
-/// Default maximum retry interval (1 minute).
-pub const DEFAULT_MAX_INTERVAL_SECS: u64 = 60;
-/// Default maximum retry attempts (3).
-pub const DEFAULT_MAX_RETRY_ATTEMPTS: u32 = 3;
+// These constants back the values returned by `default_activity_options`
+// / `default_retry_policy`. Kept `pub(crate)` because they're
+// implementation details — consumers who want to customise the defaults
+// should reach for the builder, not multiply by these numbers.
+pub(crate) const DEFAULT_START_TO_CLOSE_MINS: u64 = 10;
+pub(crate) const DEFAULT_INITIAL_INTERVAL_MS: u64 = 1_000;
+pub(crate) const DEFAULT_BACKOFF_COEFFICIENT: f64 = 2.0;
+pub(crate) const DEFAULT_MAX_INTERVAL_SECS: u64 = 60;
+pub(crate) const DEFAULT_MAX_RETRY_ATTEMPTS: u32 = 3;
 
 /// How a pattern reacts when a step reports failure.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
