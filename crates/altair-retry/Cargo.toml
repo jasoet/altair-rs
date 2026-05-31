@@ -25,7 +25,7 @@ pretty_assertions = { workspace = true }
 anyhow = { workspace = true }
 tracing-subscriber = { workspace = true }
 # Sibling crate for the with_otel example only.
-altair-otel = { path = "../altair-otel", version = "0.1" }
+altair-otel = { path = "../altair-otel", version = "0.2" }
 
 [lints]
 workspace = true

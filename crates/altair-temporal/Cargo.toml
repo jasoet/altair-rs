@@ -36,7 +36,7 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
-altair-base32 = { path = "../altair-base32", version = "0.1" }
+altair-base32 = { path = "../altair-base32", version = "0.2" }
 # Optional: enabled by the `testcontainers` feature.
 testcontainers = { workspace = true, optional = true }
 
@@ -56,8 +56,8 @@ futures = { workspace = true }
 futures-util = "0.3"
 serde = { workspace = true }
 # Sibling crates for examples only.
-altair-otel = { path = "../altair-otel", version = "0.1" }
-altair-config = { path = "../altair-config", version = "0.1" }
+altair-otel = { path = "../altair-otel", version = "0.2" }
+altair-config = { path = "../altair-config", version = "0.2" }
 
 [lints]
 workspace = true
