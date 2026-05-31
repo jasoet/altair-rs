@@ -204,18 +204,6 @@ where
     }
 }
 
-impl<T, U> Default for SyncJobBuilder<T, U>
-where
-    T: Send + 'static,
-    U: Send + 'static,
-{
-    /// Build with an empty name. `build()` will reject it — useful only
-    /// for derive-`Default` integration with parent structs.
-    fn default() -> Self {
-        Self::new(String::new())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

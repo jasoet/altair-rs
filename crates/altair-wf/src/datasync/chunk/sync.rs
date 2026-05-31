@@ -29,10 +29,16 @@ use crate::datasync::chunk::partition::{Partition, PartitionResult, SyncResult};
 use crate::error::Result;
 
 /// Configuration for [`chunked_sync_run`].
+///
+/// Fields are private — use [`ChunkedSyncConfig::new`] plus the
+/// chainable setters (`partition_sleep`, `max_partitions_per_execution`)
+/// to construct. Keeping the fields private removes the field/setter
+/// name overlap that would otherwise let two `cfg.partition_sleep` call
+/// sites mean different things.
 #[derive(Debug, Clone)]
 pub struct ChunkedSyncConfig {
     /// Echoed into [`SyncResult::job_name`].
-    pub job_name: String,
+    pub(crate) job_name: String,
     /// Sleep duration inserted between partition activity calls. Zero
     /// disables the inter-partition delay.
     ///
@@ -40,7 +46,7 @@ pub struct ChunkedSyncConfig {
     /// to [`chunked_sync_run`]. Inside a Temporal workflow body, that
     /// closure must use the workflow-side timer (`ctx.timer(d)`) so
     /// replay stays deterministic.
-    pub partition_sleep: Duration,
+    pub(crate) partition_sleep: Duration,
     /// Cap on partitions handled by one execution. When `> 0` and the
     /// partition list (after cursor filtering) exceeds this number, the
     /// helper truncates to this many and sets `deferred = true` on the
@@ -49,7 +55,7 @@ pub struct ChunkedSyncConfig {
     ///
     /// **Must be paired with a cursor.** Without one, the next execution
     /// would re-process the same prefix forever.
-    pub max_partitions_per_execution: usize,
+    pub(crate) max_partitions_per_execution: usize,
 }
 
 impl ChunkedSyncConfig {
@@ -81,6 +87,15 @@ impl ChunkedSyncConfig {
 /// Cursor-handling shape. Pair `read` + `advance` to enable resumable
 /// chunked sync; pass [`Cursor::None`] when the partitioner is bounded
 /// and there is no need to skip processed work.
+///
+/// **Closure shape.** The `ReadFn` / `AdvFn` generics are not bounded
+/// at the type level — they get their full bounds inside the
+/// [`chunked_sync_run`] helper. The expected shape is:
+///
+/// ```text
+/// ReadFn: FnOnce() -> Future<Output = Result<Option<K>>>
+/// AdvFn:  FnMut(K) -> Future<Output = Result<()>>
+/// ```
 ///
 /// **Inclusion semantics.** The cursor is interpreted as "every
 /// partition whose `start >= cursor` is unprocessed". A partition with
@@ -123,12 +138,33 @@ pub enum Cursor<ReadFn, AdvFn> {
 /// `start_activity(...).await` call; outside a workflow (in tests or
 /// scripts), the closures can call their concrete services directly.
 ///
+/// # Why 11 generics?
+///
+/// Five distinct async closures (list, run, read, advance, sleep) each
+/// expand into a `Fn(_) -> Fut` pair (10) plus the partition key `K`,
+/// for 11 type parameters. Rust does not currently let us collapse
+/// these into a single trait without imposing structural change on the
+/// call sites. The verbose signature is the price of keeping the helper
+/// SDK-agnostic. If the count becomes a problem, split into
+/// `chunked_sync_run_with_cursor` and `chunked_sync_run_no_cursor`
+/// helpers — see the deferred-fix log.
+///
 /// # Errors
 ///
 /// - [`Error::InvalidInput`](crate::error::Error::InvalidInput) when
 ///   `config.max_partitions_per_execution > 0` is set without a cursor.
 /// - Anything `list_partitions`, `run_partition`, the cursor read, the
 ///   cursor advance, or the sleeper returns.
+///
+/// # Partial progress on activity error
+///
+/// When `run_partition` fails on the *N*-th partition, every partition
+/// before it has already been processed *and* `advance` has been
+/// called for it (the helper does **not** roll back the cursor).
+/// A subsequent execution that retries the workflow input will skip
+/// past those completed partitions via cursor filtering — so the
+/// tracker is the durable boundary, and `advance` implementations
+/// must be idempotent (see [`Cursor`] for the type-level note).
 #[allow(clippy::too_many_arguments)]
 pub async fn chunked_sync_run<
     K,

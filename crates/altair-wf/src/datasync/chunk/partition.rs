@@ -29,9 +29,13 @@ impl<K> Partition<K> {
     /// [`Error::InvalidInput`](crate::error::Error::InvalidInput) when
     /// `end <= start`. Use this in partitioner implementations that
     /// want defensive validation.
+    ///
+    /// The `K: Ord` bound (rather than `PartialOrd`) matches the
+    /// downstream [`chunked_sync_run`](super::chunked_sync_run) helper
+    /// and rejects keys with a total-order hole (e.g. `f64::NAN`).
     pub fn try_new(start: K, end: K) -> crate::error::Result<Self>
     where
-        K: PartialOrd + std::fmt::Debug,
+        K: Ord + std::fmt::Debug,
     {
         if end <= start {
             return Err(crate::error::Error::InvalidInput(format!(
@@ -66,6 +70,13 @@ pub struct PartitionResult<K> {
 /// Workflow-level summary aggregating every partition processed during
 /// this execution. When the chunked sync defers work via continue-as-new,
 /// `partitions` covers only the partitions handled by **this** execution.
+///
+/// **Not** the per-cycle [`crate::datasync::SyncResult`] returned by
+/// [`crate::datasync::Runner`] — that one is parameterless and tracks
+/// `WriteResult` totals; this one is keyed by `K` and aggregates
+/// partition-level outcomes. The prelude re-exports this as
+/// `ChunkSyncResult` to keep the two names distinct at glob-import
+/// sites.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncResult<K> {
     /// Echo of the job name.
@@ -122,6 +133,32 @@ mod tests {
     fn try_new_rejects_zero_width_or_inverted_range() {
         assert!(Partition::try_new(10_i64, 10).is_err());
         assert!(Partition::try_new(10_i64, 5).is_err());
+    }
+
+    #[test]
+    fn try_new_error_message_renders_both_keys() {
+        // Pins the `K: Debug` bound — if a future refactor drops
+        // `Debug` or skips the format! call, the error becomes useless
+        // for callers writing custom partitioners.
+        let err = Partition::try_new(10_i64, 5).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("10"), "expected start in message: {msg}");
+        assert!(msg.contains('5'), "expected end in message: {msg}");
+    }
+
+    #[test]
+    fn sync_result_default_does_not_require_k_default() {
+        // Pins the hand-written `Default` impl: `SyncResult<K>::default()`
+        // must compile and succeed even when `K` does not implement
+        // `Default`. A future refactor switching to `#[derive(Default)]`
+        // would break this.
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        struct NoDefaultKey(i64);
+        let r: SyncResult<NoDefaultKey> = SyncResult::default();
+        assert_eq!(r.job_name, "");
+        assert_eq!(r.total_partitions, 0);
+        assert!(r.partitions.is_empty());
+        assert!(!r.deferred);
     }
 
     #[test]
