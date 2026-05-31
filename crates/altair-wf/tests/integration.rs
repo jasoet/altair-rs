@@ -1,0 +1,476 @@
+//! End-to-end behaviour tests against a real Temporal server.
+//!
+//! Each test defines workflow types that use the `altair-wf` patterns
+//! inside their `#[run]` methods, spins up a `TemporalContainer`, runs
+//! the workflow, and asserts the result. Gated behind the
+//! `integration-tests` feature.
+
+#![cfg(feature = "integration-tests")]
+#![allow(
+    tail_expr_drop_order,
+    clippy::missing_panics_doc,
+    clippy::large_futures,
+    clippy::duration_suboptimal_units,
+    missing_docs,
+    clippy::needless_pass_by_value,
+    clippy::default_trait_access,
+    clippy::unused_async,
+    clippy::module_name_repetitions
+)]
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
+// Note: avoid `use altair_wf::prelude::*` here because the prelude exports
+// a `Result<T>` 1-arg alias that would shadow `std::result::Result<T, E>`
+// inside `#[activity]` and `#[workflow_methods]` macro expansions.
+use altair_temporal::WorkerBuilder;
+use altair_temporal::temporalio_client::{Client, WorkflowGetResultOptions, WorkflowStartOptions};
+use altair_temporal::temporalio_common;
+#[allow(unused_imports)]
+use altair_temporal::temporalio_macros::{activities, activity, run, workflow, workflow_methods};
+use altair_temporal::temporalio_sdk::{
+    WorkflowContext, WorkflowResult,
+    activities::{ActivityContext, ActivityError},
+};
+use altair_temporal::testcontainer::TemporalContainer;
+use altair_wf::{
+    DAGInput, DAGNode, DAGOutput, FailureStrategy, ParallelInput, ParallelOutput, PipelineInput,
+    PipelineOutput, TaskInput, TaskOutput, default_activity_options, parallel, pipeline, run_dag,
+};
+#[allow(unused_imports)]
+use futures::FutureExt as _;
+use tokio::sync::OnceCell;
+
+// ---------------------------------------------------------------------------
+// Shared container fixture
+// ---------------------------------------------------------------------------
+
+static CONTAINER: OnceCell<TemporalContainer> = OnceCell::const_new();
+
+async fn temporal() -> &'static TemporalContainer {
+    CONTAINER
+        .get_or_init(|| async {
+            TemporalContainer::start()
+                .await
+                .expect("start Temporal container")
+        })
+        .await
+}
+
+fn unique(prefix: &str) -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    format!("{prefix}-{pid}-{n}")
+}
+
+async fn run_with_workload<F, T>(
+    worker: altair_temporal::Worker,
+    workload: F,
+    deadline: Duration,
+) -> T
+where
+    F: std::future::Future<Output = T>,
+{
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let shutdown = async move {
+        let _ = rx.await;
+    };
+    let worker_fut = Box::pin(worker.run_with_shutdown(shutdown));
+
+    let workload_with_signal = Box::pin(async move {
+        let result = workload.await;
+        let _ = tx.send(());
+        result
+    });
+
+    let (_, result) = tokio::time::timeout(
+        deadline,
+        futures::future::join(worker_fut, workload_with_signal),
+    )
+    .await
+    .expect("worker + workload finish before deadline");
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Common payloads + a single Echo activity
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EchoIn {
+    pub id: u32,
+    pub msg: String,
+    pub will_fail: bool,
+}
+impl TaskInput for EchoIn {}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EchoOut {
+    pub id: u32,
+    pub echoed: String,
+    pub ok: bool,
+}
+impl TaskOutput for EchoOut {
+    fn is_success(&self) -> bool {
+        self.ok
+    }
+    fn error(&self) -> Option<&str> {
+        if self.ok { None } else { Some(&self.echoed) }
+    }
+}
+
+pub struct EchoActivities;
+
+#[activities]
+impl EchoActivities {
+    #[activity]
+    pub async fn echo(
+        _ctx: ActivityContext,
+        input: EchoIn,
+    ) -> std::result::Result<EchoOut, ActivityError> {
+        if input.will_fail {
+            Err(ActivityError::application(
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!(
+                    "id={}", input.id
+                ))
+                .type_name("EchoFailed".to_string())
+                .non_retryable(true)
+                .build(),
+            ))
+        } else {
+            Ok(EchoOut {
+                id: input.id,
+                echoed: format!("echo:{}", input.msg),
+                ok: true,
+            })
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Workflows — one per pattern
+// ---------------------------------------------------------------------------
+
+#[workflow]
+#[derive(Default)]
+pub struct PipelineWf;
+
+#[workflow_methods]
+impl PipelineWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: PipelineInput<EchoIn>,
+    ) -> WorkflowResult<PipelineOutput<EchoOut>> {
+        let opts = default_activity_options();
+        // Reborrow as a shared reference so the dispatch closure (Fn /
+        // FnMut bound by altair_wf::pipeline) can be called repeatedly.
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let result = pipeline(input, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(EchoActivities::echo, step, opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::Activity {
+                        activity: "EchoActivities::echo".into(),
+                        source: Box::new(e),
+                    })
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+#[workflow]
+#[derive(Default)]
+pub struct ParallelWf;
+
+#[workflow_methods]
+impl ParallelWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: ParallelInput<EchoIn>,
+    ) -> WorkflowResult<ParallelOutput<EchoOut>> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let result = parallel(input, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(EchoActivities::echo, step, opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::Activity {
+                        activity: "EchoActivities::echo".into(),
+                        source: Box::new(e),
+                    })
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+#[workflow]
+#[derive(Default)]
+pub struct DAGWf;
+
+#[workflow_methods]
+impl DAGWf {
+    #[run]
+    pub async fn run(
+        ctx: &mut WorkflowContext<Self>,
+        input: DAGInput<EchoIn>,
+    ) -> WorkflowResult<DAGOutput<EchoOut>> {
+        let opts = default_activity_options();
+        let ctx_ref: &WorkflowContext<Self> = ctx;
+        let result = run_dag(input, |step| {
+            let opts = opts.clone();
+            async move {
+                ctx_ref
+                    .start_activity(EchoActivities::echo, step, opts)
+                    .await
+                    .map_err(|e| altair_wf::Error::Activity {
+                        activity: "EchoActivities::echo".into(),
+                        source: Box::new(e),
+                    })
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+fn ok(id: u32) -> EchoIn {
+    EchoIn {
+        id,
+        msg: format!("msg{id}"),
+        will_fail: false,
+    }
+}
+fn bad(id: u32) -> EchoIn {
+    EchoIn {
+        id,
+        msg: format!("msg{id}"),
+        will_fail: true,
+    }
+}
+
+async fn build_worker(tq: &str) -> altair_temporal::Worker {
+    let temporal = temporal().await;
+    let cfg = temporal.config(tq);
+    WorkerBuilder::new(&cfg)
+        .register_workflow::<PipelineWf>()
+        .register_workflow::<ParallelWf>()
+        .register_workflow::<DAGWf>()
+        .register_activities(EchoActivities)
+        .build()
+        .await
+        .expect("build worker")
+}
+
+async fn temporal_client() -> Client {
+    let temporal = temporal().await;
+    let cfg = temporal.config(unique("client"));
+    altair_temporal::Client::from_config(&cfg)
+        .await
+        .expect("client")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn pipeline_round_trip_three_tasks_continue() {
+    let tq = unique("wf-pipeline-cont");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("pipeline-cont-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let input = PipelineInput {
+            tasks: vec![ok(1), bad(2), ok(3)],
+            stop_on_error: false,
+            cleanup: false,
+        };
+        let handle = client
+            .start_workflow(
+                PipelineWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: PipelineOutput<EchoOut> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.total_success, 2);
+    assert_eq!(out.total_failed, 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn parallel_round_trip_all_succeed() {
+    let tq = unique("wf-parallel-all");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("parallel-all-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let input = ParallelInput {
+            tasks: vec![ok(1), ok(2), ok(3), ok(4)],
+            failure_strategy: FailureStrategy::Continue,
+        };
+        let handle = client
+            .start_workflow(
+                ParallelWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: ParallelOutput<EchoOut> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.total_success, 4);
+    assert_eq!(out.total_failed, 0);
+    assert_eq!(out.results.len(), 4);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn dag_diamond_runs_in_topological_order() {
+    let tq = unique("wf-dag-diamond");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("dag-diamond-wid");
+    let tq_clone = tq.clone();
+
+    let input = DAGInput {
+        nodes: vec![
+            DAGNode {
+                name: "a".into(),
+                input: ok(1),
+                dependencies: vec![],
+            },
+            DAGNode {
+                name: "b".into(),
+                input: ok(2),
+                dependencies: vec!["a".into()],
+            },
+            DAGNode {
+                name: "c".into(),
+                input: ok(3),
+                dependencies: vec!["a".into()],
+            },
+            DAGNode {
+                name: "d".into(),
+                input: ok(4),
+                dependencies: vec!["b".into(), "c".into()],
+            },
+        ],
+        fail_fast: true,
+        max_parallel: 0,
+    };
+
+    let workload = async move {
+        let handle = client
+            .start_workflow(
+                DAGWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: DAGOutput<EchoOut> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert_eq!(out.total_success, 4);
+    assert_eq!(out.total_failed, 0);
+    assert_eq!(out.results.len(), 4);
+    assert_eq!(out.node_results.len(), 4);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn pipeline_stop_on_error_returns_workflow_failure() {
+    let tq = unique("wf-pipeline-stop");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("pipeline-stop-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let input = PipelineInput {
+            tasks: vec![ok(1), bad(2), ok(3)],
+            stop_on_error: true,
+            cleanup: false,
+        };
+        let handle = client
+            .start_workflow(
+                PipelineWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        let res: Result<PipelineOutput<EchoOut>, _> =
+            handle.get_result(WorkflowGetResultOptions::default()).await;
+        res
+    };
+
+    let res = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert!(res.is_err(), "expected workflow failure, got Ok");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn parallel_fail_fast_returns_workflow_failure() {
+    let tq = unique("wf-parallel-fail-fast");
+    let worker = build_worker(&tq).await;
+    let client = temporal_client().await;
+    let wf_id = unique("parallel-ff-wid");
+    let tq_clone = tq.clone();
+
+    let workload = async move {
+        let input = ParallelInput {
+            tasks: vec![ok(1), bad(2), ok(3), ok(4)],
+            failure_strategy: FailureStrategy::FailFast,
+        };
+        let handle = client
+            .start_workflow(
+                ParallelWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        let res: Result<ParallelOutput<EchoOut>, _> =
+            handle.get_result(WorkflowGetResultOptions::default()).await;
+        res
+    };
+
+    let res = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    assert!(res.is_err(), "expected workflow failure under fail-fast");
+}
