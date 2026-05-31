@@ -13,7 +13,14 @@ use crate::error::{Error, Result};
 ///
 /// Constructed via [`SyncJobBuilder`]. The struct is open and `Clone`-free:
 /// users typically wrap it in an `Arc` for shared ownership across the
-/// worker and the workflow body.
+/// worker (which registers the activities) and the workflow body (which
+/// reads the schedule + retry options). The expected pattern is:
+///
+/// ```text
+/// let job = std::sync::Arc::new(SyncJobBuilder::new("orders").<...>.build()?);
+/// ```
+///
+/// then hand `job.clone()` to whichever side needs it.
 pub struct Job<T, U>
 where
     T: Send + 'static,
@@ -194,6 +201,18 @@ where
             retry_backoff_coefficient: self.retry_backoff_coefficient,
             retry_max_interval: self.retry_max_interval,
         })
+    }
+}
+
+impl<T, U> Default for SyncJobBuilder<T, U>
+where
+    T: Send + 'static,
+    U: Send + 'static,
+{
+    /// Build with an empty name. `build()` will reject it — useful only
+    /// for derive-`Default` integration with parent structs.
+    fn default() -> Self {
+        Self::new(String::new())
     }
 }
 

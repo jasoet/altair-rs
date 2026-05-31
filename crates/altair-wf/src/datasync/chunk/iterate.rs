@@ -97,6 +97,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sleeper_provided_but_sleep_zero_is_short_circuited() {
+        // Pins the `sleep.is_zero()` optimisation: even when a sleeper
+        // is supplied, no calls are made when the configured sleep is
+        // zero. Avoids a regression that would awake every iteration
+        // unnecessarily.
+        let calls = Arc::new(AtomicUsize::new(0));
+        let cap = calls.clone();
+        let parts = vec![Partition::new(0, 1), Partition::new(1, 2)];
+        let sleeper = move |_d: Duration| {
+            let cap = cap.clone();
+            async move {
+                cap.fetch_add(1, Ordering::SeqCst);
+            }
+        };
+        iterate_partitions(parts, Duration::ZERO, Some(sleeper), |_p| async { Ok(()) })
+            .await
+            .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
     async fn body_error_short_circuits_iteration() {
         let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
         let cap = seen.clone();
