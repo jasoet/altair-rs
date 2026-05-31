@@ -16,10 +16,21 @@ use tower_http::cors::CorsLayer;
 const DEFAULT_BIND_ADDR: &str = "0.0.0.0:8080";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_HEALTH_PATH: &str = "/health";
+/// Default request body size limit: 2 MiB. Matches axum's built-in limit
+/// but applied via tower-http so it can be overridden up or down.
+const DEFAULT_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 
 /// Typed builder for [`Server`].
 ///
 /// Construct via [`Server::builder`](crate::Server::builder).
+///
+/// # Defaults
+///
+/// - bind address: `0.0.0.0:8080`
+/// - request timeout: 30s (applied via `tower_http::timeout::TimeoutLayer`)
+/// - request body limit: 2 MiB (via [`Self::request_body_limit`])
+/// - tracing, request-id, health endpoint at `/health`: enabled
+/// - CORS, compression, shutdown timeout: disabled / unset
 #[must_use]
 #[allow(clippy::struct_excessive_bools)] // each toggle is an independent middleware knob
 pub struct ServerBuilder {
@@ -28,11 +39,13 @@ pub struct ServerBuilder {
     tracing: bool,
     request_id: bool,
     timeout: Duration,
+    body_limit: usize,
     cors: Option<CorsLayer>,
     compression: bool,
     health_enabled: bool,
     health_path: String,
     health_responder: HealthResponder,
+    shutdown_timeout: Option<Duration>,
 }
 
 impl Default for ServerBuilder {
@@ -43,11 +56,13 @@ impl Default for ServerBuilder {
             tracing: true,
             request_id: true,
             timeout: DEFAULT_TIMEOUT,
+            body_limit: DEFAULT_BODY_LIMIT_BYTES,
             cors: None,
             compression: false,
             health_enabled: true,
             health_path: DEFAULT_HEALTH_PATH.to_string(),
             health_responder: health::default_responder(),
+            shutdown_timeout: None,
         }
     }
 }
@@ -93,8 +108,36 @@ impl ServerBuilder {
     }
 
     /// Set the per-request timeout. Default 30s.
+    ///
+    /// The timeout wraps the entire request, including all middleware
+    /// (tracing, CORS, custom layers) and the handler itself. Slow
+    /// middleware will count against this deadline.
     pub fn request_timeout(mut self, d: Duration) -> Self {
         self.timeout = d;
+        self
+    }
+
+    /// Cap the size of incoming request bodies (default 2 MiB).
+    ///
+    /// Requests with bodies larger than this receive an immediate
+    /// `413 Payload Too Large` response without buffering the full body.
+    /// Mitigates slow-drip and body-bomb attacks against public-facing
+    /// servers.
+    pub fn request_body_limit(mut self, bytes: usize) -> Self {
+        self.body_limit = bytes;
+        self
+    }
+
+    /// Bound the graceful shutdown drain (default: unbounded).
+    ///
+    /// After the shutdown future resolves, axum stops accepting new
+    /// connections and waits for in-flight requests to finish. Without
+    /// a bound, a stuck handler keeps the server alive forever. Set this
+    /// to enforce a deadline; in-flight requests still running after the
+    /// deadline will be dropped and `run_with_shutdown` returns
+    /// `Err(Error::ShutdownTimeout)`.
+    pub fn shutdown_timeout(mut self, d: Duration) -> Self {
+        self.shutdown_timeout = Some(d);
         self
     }
 
@@ -174,13 +217,19 @@ impl ServerBuilder {
             tracing: self.tracing,
             request_id: self.request_id,
             timeout: self.timeout,
+            body_limit: self.body_limit,
             cors: self.cors,
             compression: self.compression,
         };
 
         let router = stack.apply(router);
 
-        Ok(Server::from_parts(router, listener, local_addr))
+        Ok(Server::from_parts(
+            router,
+            listener,
+            local_addr,
+            self.shutdown_timeout,
+        ))
     }
 }
 
