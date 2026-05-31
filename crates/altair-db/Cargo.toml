@@ -37,8 +37,8 @@ testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true }
 toml = { workspace = true }
 # Sibling crates for examples only.
-altair-otel = { path = "../altair-otel", version = "0.1" }
-altair-config = { path = "../altair-config", version = "0.1" }
+altair-otel = { path = "../altair-otel", version = "0.2" }
+altair-config = { path = "../altair-config", version = "0.2" }
 
 [[example]]
 name = "basic_orm"
