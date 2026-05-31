@@ -1,0 +1,48 @@
+[package]
+name = "altair-wf"
+description = "Reusable Temporal workflow patterns: single, pipeline, parallel, loop, DAG. Built on altair-temporal."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["temporal", "workflow", "pipeline", "dag", "orchestration"]
+categories = ["asynchronous"]
+
+[features]
+default = []
+# Run this crate's own integration tests against a real Temporal container.
+# Requires Docker. Pulls in altair-temporal's TemporalContainer fixture.
+integration-tests = ["altair-temporal/testcontainers"]
+
+[dependencies]
+altair-temporal = { path = "../altair-temporal", version = "0.2" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+anyhow = { workspace = true }
+pretty_assertions = { workspace = true }
+# Required by the SDK's #[workflow] / #[activities] proc-macros, which
+# expand to ::futures, ::futures_util, ::temporalio_sdk, ::temporalio_common,
+# and ::temporalio_macros absolute paths. We re-export the temporalio
+# crates via altair-temporal, but the macros need them resolvable from
+# the test crate root — hence the explicit dev-deps here.
+futures = { workspace = true }
+futures-util = "0.3"
+serde = { workspace = true }
+temporalio-sdk = { workspace = true }
+temporalio-common = { workspace = true }
+temporalio-macros = { workspace = true }
+
+[lints]
+workspace = true

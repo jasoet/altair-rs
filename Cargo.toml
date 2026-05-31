@@ -11,6 +11,7 @@ members = [
     "crates/altair-server",
     "crates/altair-db",
     "crates/altair-temporal",
+    "crates/altair-wf",
 ]
 
 [workspace.package]
