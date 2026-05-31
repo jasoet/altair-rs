@@ -1,9 +1,10 @@
 //! Directory archiving via `tar` (no compression).
 
 use crate::error::{Error, Result};
+use crate::gzip::DEFAULT_DECOMPRESS_LIMIT_BYTES;
 use crate::safe_path;
 use std::fs::{File, create_dir_all};
-use std::io::{BufReader, BufWriter};
+use std::io::{self, BufReader, BufWriter, Read};
 use std::path::Path;
 
 /// Archive `source_dir`'s contents recursively into a tar file at `output`.
@@ -38,23 +39,63 @@ pub fn tar_dir(source_dir: impl AsRef<Path>, output: impl AsRef<Path>) -> Result
 /// Extract a tar archive to `dest_dir`, creating it if it doesn't exist.
 ///
 /// Rejects entries whose path would write outside `dest_dir`
-/// ([`Error::UnsafePath`]).
+/// ([`Error::UnsafePath`]) or whose symlink/hardlink target escapes. Caps
+/// total uncompressed output at [`DEFAULT_DECOMPRESS_LIMIT_BYTES`] (4 GiB)
+/// — use [`untar_with_limit`] to override.
 ///
 /// ```no_run
 /// altair_compress::untar("/tmp/proj.tar", "/tmp/restored").unwrap();
 /// ```
 pub fn untar(archive: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
+    untar_with_limit(archive, dest_dir, DEFAULT_DECOMPRESS_LIMIT_BYTES)
+}
+
+/// Like [`untar`] but with a caller-specified `max_total_bytes` cap on
+/// the total extracted file bytes. Returns
+/// [`Error::DecompressionLimit`] if the cap is exceeded.
+pub fn untar_with_limit(
+    archive: impl AsRef<Path>,
+    dest_dir: impl AsRef<Path>,
+    max_total_bytes: u64,
+) -> Result<()> {
     let dest = dest_dir.as_ref();
     create_dir_all(dest)?;
     let archive_file = File::open(archive.as_ref())?;
-    let mut archive = ::tar::Archive::new(BufReader::new(archive_file));
+    let archive = ::tar::Archive::new(BufReader::new(archive_file));
+    unpack_entries(archive, dest, max_total_bytes)
+}
 
+pub(crate) fn unpack_entries<R: Read>(
+    mut archive: ::tar::Archive<R>,
+    dest: &Path,
+    max_total_bytes: u64,
+) -> Result<()> {
+    let mut total_written: u64 = 0;
     for entry in archive.entries()? {
         let mut entry = entry?;
         let entry_path = entry.path()?.into_owned();
         let safe_dest = safe_path::resolve(dest, &entry_path)?;
         check_entry_links(&entry, &entry_path)?;
-        entry.unpack(&safe_dest)?;
+        // Directories, symlinks, hardlinks: let tar handle them — they
+        // don't contribute file bytes. Only regular files count.
+        if entry.header().entry_type().is_file() {
+            if let Some(parent) = safe_dest.parent() {
+                create_dir_all(parent)?;
+            }
+            let remaining = max_total_bytes.saturating_sub(total_written);
+            let mut bounded = (&mut entry).take(remaining.saturating_add(1));
+            let mut out = BufWriter::new(File::create(&safe_dest)?);
+            let written = io::copy(&mut bounded, &mut out)?;
+            total_written = total_written.saturating_add(written);
+            if total_written > max_total_bytes {
+                return Err(Error::DecompressionLimit {
+                    limit: max_total_bytes,
+                    kind: "tar-entry",
+                });
+            }
+        } else {
+            entry.unpack(&safe_dest)?;
+        }
     }
     Ok(())
 }

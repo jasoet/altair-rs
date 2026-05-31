@@ -1,10 +1,11 @@
 //! Directory archiving via `zip` (DEFLATE compression).
 
 use crate::error::{Error, Result};
+use crate::gzip::DEFAULT_DECOMPRESS_LIMIT_BYTES;
 use crate::safe_path;
 use ::zip::write::SimpleFileOptions;
 use std::fs::{File, create_dir_all};
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 /// Archive `source_dir`'s contents recursively into a zip file at `output`,
@@ -65,17 +66,45 @@ fn walk_and_add<W: Write + std::io::Seek>(
 /// Extract a zip archive to `dest_dir`, creating it if it doesn't exist.
 ///
 /// Rejects entries whose path would write outside `dest_dir`
-/// ([`Error::UnsafePath`]).
+/// ([`Error::UnsafePath`]). Caps total decompressed output at
+/// [`DEFAULT_DECOMPRESS_LIMIT_BYTES`] (4 GiB) so a malicious archive
+/// claiming `u64::MAX` per-entry size can't OOM the process. Use
+/// [`unzip_with_limit`] to override the cap.
 ///
 /// ```no_run
 /// altair_compress::unzip("/tmp/proj.zip", "/tmp/restored").unwrap();
 /// ```
 pub fn unzip(archive: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()> {
+    unzip_with_limit(archive, dest_dir, DEFAULT_DECOMPRESS_LIMIT_BYTES)
+}
+
+/// Like [`unzip`] but with a caller-specified `max_total_bytes` cap on
+/// the total uncompressed output across all entries. Returns
+/// [`Error::DecompressionLimit`] if the cap is exceeded.
+///
+/// Each entry is streamed (not buffered in memory) so a single
+/// `u64::MAX`-claiming entry no longer triggers a giant allocation —
+/// only the cap matters.
+///
+/// ```no_run
+/// // Trust this archive up to 8 GiB.
+/// altair_compress::unzip_with_limit(
+///     "/tmp/big-trusted.zip",
+///     "/tmp/restored",
+///     8 * 1024 * 1024 * 1024,
+/// ).unwrap();
+/// ```
+pub fn unzip_with_limit(
+    archive: impl AsRef<Path>,
+    dest_dir: impl AsRef<Path>,
+    max_total_bytes: u64,
+) -> Result<()> {
     let dest = dest_dir.as_ref();
     create_dir_all(dest)?;
     let archive_file = File::open(archive.as_ref())?;
     let mut zip_archive = ::zip::ZipArchive::new(BufReader::new(archive_file))?;
 
+    let mut total_written: u64 = 0;
     for i in 0..zip_archive.len() {
         let mut entry = zip_archive.by_index(i)?;
         let entry_path = entry.enclosed_name().ok_or_else(|| Error::UnsafePath {
@@ -89,10 +118,19 @@ pub fn unzip(archive: impl AsRef<Path>, dest_dir: impl AsRef<Path>) -> Result<()
             if let Some(parent) = safe_dest.parent() {
                 create_dir_all(parent)?;
             }
+            let remaining = max_total_bytes.saturating_sub(total_written);
+            // Read at most remaining+1 so we can detect over-limit
+            // without buffering the whole entry first.
+            let mut bounded = (&mut entry).take(remaining.saturating_add(1));
             let mut out = BufWriter::new(File::create(&safe_dest)?);
-            let mut buf = Vec::new();
-            entry.read_to_end(&mut buf)?;
-            out.write_all(&buf)?;
+            let written = io::copy(&mut bounded, &mut out)?;
+            total_written = total_written.saturating_add(written);
+            if total_written > max_total_bytes {
+                return Err(Error::DecompressionLimit {
+                    limit: max_total_bytes,
+                    kind: "zip-entry",
+                });
+            }
         }
     }
     Ok(())

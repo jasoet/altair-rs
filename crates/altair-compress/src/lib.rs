@@ -40,10 +40,12 @@ mod zip_recipe;
 pub mod prelude;
 
 pub use error::{Error, Result};
-pub use gzip::{compress_file, decompress_file};
-pub use tar_recipe::{tar_dir, untar};
-pub use tarball::{tar_gz_dir, untar_gz};
-pub use zip_recipe::{unzip, zip_dir};
+pub use gzip::{
+    DEFAULT_DECOMPRESS_LIMIT_BYTES, compress_file, decompress_file, decompress_file_with_limit,
+};
+pub use tar_recipe::{tar_dir, untar, untar_with_limit};
+pub use tarball::{tar_gz_dir, untar_gz, untar_gz_with_limit};
+pub use zip_recipe::{unzip, unzip_with_limit, zip_dir};
 
 // Re-exports for one-dep ergonomics — users get `altair_compress::tar::Builder`,
 // `altair_compress::zip::ZipWriter`, etc. without adding the libraries separately.
