@@ -59,7 +59,7 @@ pub use helpers::{
     DEFAULT_BACKOFF_COEFFICIENT, DEFAULT_INITIAL_INTERVAL_MS, DEFAULT_MAX_INTERVAL_SECS,
     DEFAULT_MAX_RETRY_ATTEMPTS, DEFAULT_START_TO_CLOSE_MINS, FailureStrategy,
     default_activity_options, default_retry_policy, generate_parameter_combinations,
-    substitute_template,
+    substitute_template, substitutor_from_fn,
 };
 pub use patterns::{
     execute, execute_with_timeout, parallel, parameterized_loop, pipeline, run_dag, run_loop,
@@ -69,3 +69,12 @@ pub use types::{
     LoopInput, LoopOutput, ParallelInput, ParallelOutput, ParameterizedLoopInput, PipelineInput,
     PipelineOutput, Substitutor,
 };
+
+// One-dep ergonomics: re-export the altair-temporal types every workflow
+// author needs alongside the patterns. Consumers can now write
+// `use altair_wf::WorkflowContext;` instead of having to add altair-temporal
+// to their `[dependencies]` separately and remember the long path.
+pub use altair_temporal;
+pub use altair_temporal::RetryPolicy;
+pub use altair_temporal::temporalio_sdk::activities::{ActivityContext, ActivityError};
+pub use altair_temporal::temporalio_sdk::{ActivityOptions, WorkflowContext, WorkflowResult};

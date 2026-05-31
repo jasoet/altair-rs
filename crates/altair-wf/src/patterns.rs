@@ -41,6 +41,27 @@ where
 // ---------------------------------------------------------------------------
 
 /// Validate the input and dispatch a single task.
+///
+/// Takes `FnMut` because the closure is consumed exactly once.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn ex() -> altair_wf::Result<()> {
+/// use altair_wf::{execute, TaskInput, TaskOutput};
+///
+/// #[derive(Clone)]
+/// struct Greet { who: String }
+/// impl TaskInput for Greet {}
+/// struct GreetOut { msg: String }
+/// impl TaskOutput for GreetOut { fn is_success(&self) -> bool { true } }
+///
+/// let _out: GreetOut = execute(Greet { who: "world".into() }, |g| async move {
+///     // real code: ctx.start_activity(MyActivities::greet, g, opts).await...
+///     Ok(GreetOut { msg: format!("hello, {}", g.who) })
+/// }).await?;
+/// # Ok(()) }
+/// ```
 pub async fn execute<F, Fut, I, O>(input: I, mut execute_one: F) -> Result<O>
 where
     I: TaskInput,
@@ -56,6 +77,25 @@ where
 
 /// `execute` with a per-call timeout enforced by `tokio::time::timeout`.
 /// Returns [`Error::PatternStopped`] on timeout.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn ex() -> altair_wf::Result<()> {
+/// use std::time::Duration;
+/// use altair_wf::{execute_with_timeout, TaskInput, TaskOutput};
+///
+/// #[derive(Clone)]
+/// struct Slow;
+/// impl TaskInput for Slow {}
+/// struct SlowOut;
+/// impl TaskOutput for SlowOut { fn is_success(&self) -> bool { true } }
+///
+/// let _out: SlowOut = execute_with_timeout(Slow, Duration::from_secs(30), |_| async {
+///     Ok(SlowOut)
+/// }).await?;
+/// # Ok(()) }
+/// ```
 pub async fn execute_with_timeout<F, Fut, I, O>(
     input: I,
     timeout: Duration,
@@ -83,6 +123,33 @@ where
 /// Run `input.tasks` sequentially. On the first failure, returns
 /// [`Error::PatternStopped`] if `stop_on_error` is set, otherwise
 /// continues.
+///
+/// Takes `FnMut` because the closure runs one-at-a-time and is allowed
+/// to capture mutable state (e.g. an accumulator across steps).
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn ex() -> altair_wf::Result<()> {
+/// use altair_wf::{pipeline, PipelineInput, PipelineOutput, TaskInput, TaskOutput};
+///
+/// #[derive(Clone)]
+/// struct Step { id: u32 }
+/// impl TaskInput for Step {}
+/// struct StepOut;
+/// impl TaskOutput for StepOut { fn is_success(&self) -> bool { true } }
+///
+/// let input = PipelineInput {
+///     tasks: vec![Step { id: 1 }, Step { id: 2 }],
+///     stop_on_error: true,
+///     cleanup: false,
+/// };
+/// let _out: PipelineOutput<StepOut> = pipeline(input, |s| async move {
+///     // ctx.start_activity(MyActivities::run_step, s, opts).await...
+///     Ok(StepOut)
+/// }).await?;
+/// # Ok(()) }
+/// ```
 pub async fn pipeline<F, Fut, I, O>(
     input: PipelineInput<I>,
     mut execute_one: F,
@@ -143,6 +210,33 @@ where
 // ---------------------------------------------------------------------------
 
 /// Run every task in `input.tasks` concurrently.
+///
+/// Takes `Fn` (not `FnMut`) because the closure is borrowed by every
+/// future built up front for `join_all` — it must be callable from
+/// multiple in-flight futures simultaneously. Capture mutable state
+/// via `Arc<Mutex<_>>` if you need to mutate.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn ex() -> altair_wf::Result<()> {
+/// use altair_wf::{parallel, FailureStrategy, ParallelInput, ParallelOutput, TaskInput, TaskOutput};
+///
+/// #[derive(Clone)]
+/// struct Probe { url: String }
+/// impl TaskInput for Probe {}
+/// struct ProbeOut { ok: bool }
+/// impl TaskOutput for ProbeOut { fn is_success(&self) -> bool { self.ok } }
+///
+/// let input = ParallelInput {
+///     tasks: vec![Probe { url: "a".into() }, Probe { url: "b".into() }],
+///     failure_strategy: FailureStrategy::FailFast,
+/// };
+/// let _out: ParallelOutput<ProbeOut> = parallel(input, |p| async move {
+///     Ok(ProbeOut { ok: !p.url.is_empty() })
+/// }).await?;
+/// # Ok(()) }
+/// ```
 pub async fn parallel<F, Fut, I, O>(
     input: ParallelInput<I>,
     execute_one: F,
@@ -211,6 +305,38 @@ where
 /// concrete input per iteration, and dispatching. Sequential when
 /// `parallel = false`, parallel otherwise. Named `run_loop` because
 /// `loop` is a Rust keyword.
+///
+/// Takes `Fn` like [`parallel`]; capture via interior mutability if
+/// needed.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn ex() -> altair_wf::Result<()> {
+/// use altair_wf::{
+///     run_loop, substitutor_from_fn, FailureStrategy, LoopInput, LoopOutput, TaskInput, TaskOutput,
+/// };
+///
+/// #[derive(Clone)]
+/// struct Deploy { region: String }
+/// impl TaskInput for Deploy {}
+/// struct DeployOut;
+/// impl TaskOutput for DeployOut { fn is_success(&self) -> bool { true } }
+///
+/// let sub = substitutor_from_fn(|tmpl: &Deploy, item: &str, _: usize, _: &_| {
+///     Deploy { region: format!("{}-{item}", tmpl.region) }
+/// });
+/// let input = LoopInput {
+///     items: vec!["us-east-1".into(), "eu-west-1".into()],
+///     template: Deploy { region: "dep".into() },
+///     parallel: true,
+///     failure_strategy: FailureStrategy::Continue,
+/// };
+/// let _out: LoopOutput<DeployOut> = run_loop(input, sub, |d| async move {
+///     Ok(DeployOut)
+/// }).await?;
+/// # Ok(()) }
+/// ```
 pub async fn run_loop<F, Fut, I, O>(
     input: LoopInput<I>,
     substitutor: Substitutor<I>,
@@ -250,6 +376,46 @@ where
 
 /// Cartesian-product loop. Substitutor receives an empty `item` string
 /// and the per-combination parameter map.
+///
+/// The combination order is **deterministic** (keys sorted
+/// lexicographically before the product is expanded) so the same
+/// `ParameterizedLoopInput` produces the same activity dispatch order
+/// on every Temporal workflow replay.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn ex() -> altair_wf::Result<()> {
+/// use std::collections::HashMap;
+/// use altair_wf::{
+///     parameterized_loop, substitutor_from_fn, FailureStrategy, LoopOutput, ParameterizedLoopInput,
+///     TaskInput, TaskOutput,
+/// };
+///
+/// #[derive(Clone)]
+/// struct Probe { region: String, tier: String }
+/// impl TaskInput for Probe {}
+/// struct ProbeOut;
+/// impl TaskOutput for ProbeOut { fn is_success(&self) -> bool { true } }
+///
+/// let mut params: HashMap<String, Vec<String>> = HashMap::new();
+/// params.insert("region".into(), vec!["us-east-1".into(), "eu-west-1".into()]);
+/// params.insert("tier".into(),   vec!["std".into(), "premium".into()]);
+///
+/// let sub = substitutor_from_fn(|_: &Probe, _: &str, _: usize, p: &HashMap<String, String>| {
+///     Probe { region: p["region"].clone(), tier: p["tier"].clone() }
+/// });
+/// let input = ParameterizedLoopInput {
+///     parameters: params,
+///     template: Probe { region: String::new(), tier: String::new() },
+///     parallel: false,
+///     failure_strategy: FailureStrategy::Continue,
+/// };
+/// let _out: LoopOutput<ProbeOut> = parameterized_loop(input, sub, |p| async move {
+///     Ok(ProbeOut)
+/// }).await?;
+/// # Ok(()) }
+/// ```
 pub async fn parameterized_loop<F, Fut, I, O>(
     input: ParameterizedLoopInput<I>,
     substitutor: Substitutor<I>,
@@ -356,6 +522,32 @@ where
 ///
 /// Named `run_dag` (not `dag`) so it doesn't collide with the internal
 /// `dag` module that owns the input/output types.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn ex() -> altair_wf::Result<()> {
+/// use altair_wf::{run_dag, DAGInput, DAGNode, DAGOutput, TaskInput, TaskOutput};
+///
+/// #[derive(Clone)]
+/// struct Step { name: String }
+/// impl TaskInput for Step {}
+/// #[derive(Clone)]
+/// struct StepOut;
+/// impl TaskOutput for StepOut { fn is_success(&self) -> bool { true } }
+///
+/// let input = DAGInput {
+///     nodes: vec![
+///         DAGNode { name: "build".into(),  input: Step { name: "build".into() },  dependencies: vec![] },
+///         DAGNode { name: "test".into(),   input: Step { name: "test".into() },   dependencies: vec!["build".into()] },
+///         DAGNode { name: "deploy".into(), input: Step { name: "deploy".into() }, dependencies: vec!["test".into()] },
+///     ],
+///     fail_fast: true,
+///     max_parallel: 0,
+/// };
+/// let _out: DAGOutput<StepOut> = run_dag(input, |s| async move { Ok(StepOut) }).await?;
+/// # Ok(()) }
+/// ```
 pub async fn run_dag<F, Fut, I, O>(input: DAGInput<I>, execute_one: F) -> Result<DAGOutput<O>>
 where
     I: TaskInput + Clone,
