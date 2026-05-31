@@ -58,16 +58,29 @@ impl Registry {
         E: std::error::Error + Send + Sync + 'static,
     {
         let name = name.into();
-        let mut map = self.inner.write().expect("registry RwLock poisoned");
+        let mut map = self
+            .inner
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if map.contains_key(&name) {
             return Err(Error::InvalidInput(format!(
                 "handler already registered: {name}"
             )));
         }
+        // Wrap the handler in an Arc so the user `Fn::call` site can be
+        // moved *into* the async block. This matters for panic safety:
+        // a handler closure that synchronously panics before constructing
+        // its future (e.g. `|input| { input.args.get("x").unwrap(); async {…} }`)
+        // would otherwise unwind through the activity's `handler(input)`
+        // expression *outside* `AssertUnwindSafe::catch_unwind`. With the
+        // call site inside the future, the panic happens on `poll` and is
+        // caught at the activity boundary.
+        let handler = Arc::new(handler);
         let wrapped: StoredHandler = Arc::new(move |input| {
-            let fut = handler(input);
+            let handler = Arc::clone(&handler);
             Box::pin(async move {
-                fut.await
+                handler(input)
+                    .await
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync + 'static>)
             })
         });
@@ -80,7 +93,7 @@ impl Registry {
     pub fn has(&self, name: &str) -> bool {
         self.inner
             .read()
-            .expect("registry RwLock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .contains_key(name)
     }
 
@@ -89,7 +102,7 @@ impl Registry {
     pub fn get(&self, name: &str) -> Result<StoredHandler> {
         self.inner
             .read()
-            .expect("registry RwLock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(name)
             .cloned()
             .ok_or_else(|| Error::InvalidInput(format!("function {name:?} not found in registry")))
@@ -98,7 +111,10 @@ impl Registry {
     /// Number of registered handlers.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.inner.read().expect("registry RwLock poisoned").len()
+        self.inner
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
     }
 
     /// `true` if no handlers are registered.
@@ -127,6 +143,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::FutureExt as _;
 
     #[tokio::test]
     async fn register_then_dispatch_returns_handler_output() {
@@ -198,6 +215,29 @@ mod tests {
         .unwrap();
         assert_eq!(reg.len(), 1);
         assert!(reg.has("x"));
+    }
+
+    #[tokio::test]
+    async fn handler_that_panics_before_returning_future_is_caught_on_poll() {
+        // Regression: the registry must wrap the user `Fn::call` so a
+        // synchronous panic (e.g. an unwrap before constructing the
+        // future) happens during `poll`, not during the wrapper call.
+        // Without this, the activity's `catch_unwind` could not catch it.
+        let mut reg = Registry::new();
+        reg.register("sync_panic", |_input: FunctionInput| {
+            panic!("synchronous boom");
+            #[allow(unreachable_code)]
+            async {
+                Ok::<FunctionOutput, std::io::Error>(FunctionOutput::default())
+            }
+        })
+        .unwrap();
+        let handler = reg.get("sync_panic").unwrap();
+        let fut = handler(FunctionInput::default());
+        // Constructing the future does NOT panic — the user-Fn call is
+        // deferred until the future is polled.
+        let res = std::panic::AssertUnwindSafe(fut).catch_unwind().await;
+        assert!(res.is_err(), "expected panic to surface during poll");
     }
 
     #[tokio::test]

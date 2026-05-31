@@ -57,3 +57,11 @@ pub use crate::{
     ActivityContext, ActivityError, ActivityOptions, Client, Config, RetryPolicy, Worker,
     WorkerBuilder, WorkflowContext, WorkflowResult,
 };
+
+// `function` module re-exports so feature-enabled consumers can opt
+// in with a single glob import.
+#[cfg(feature = "function")]
+pub use crate::function::{
+    FunctionActivities, FunctionExecutionInput, FunctionExecutionOutput, FunctionInput,
+    FunctionOutput, HandlerError, Registry,
+};
