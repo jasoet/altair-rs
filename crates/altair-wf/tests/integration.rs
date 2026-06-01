@@ -428,6 +428,7 @@ async fn parallel_round_trip_all_succeed() {
         let input = ParallelInput {
             tasks: vec![ok(1), ok(2), ok(3), ok(4)],
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let handle = client
             .start_workflow(
@@ -551,6 +552,7 @@ async fn parallel_fail_fast_returns_workflow_failure() {
         let input = ParallelInput {
             tasks: vec![ok(1), bad(2), ok(3), ok(4)],
             failure_strategy: FailureStrategy::FailFast,
+            max_in_flight: 0,
         };
         let handle = client
             .start_workflow(
@@ -611,6 +613,7 @@ async fn run_loop_iterates_over_items() {
             template: ok(100),
             parallel: false,
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let handle = client
             .start_workflow(
@@ -657,6 +660,7 @@ async fn parameterized_loop_cartesian_product_round_trip() {
             template: ok(200),
             parallel: false,
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let handle = client
             .start_workflow(
@@ -995,6 +999,7 @@ async fn function_parallel_fail_fast_fails_workflow_on_handler_unsuccessful_outp
         let input = ParallelInput {
             tasks,
             failure_strategy: FailureStrategy::FailFast,
+            max_in_flight: 0,
         };
         let handle = client
             .start_workflow(

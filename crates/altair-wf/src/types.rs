@@ -102,13 +102,24 @@ pub struct PipelineOutput<O> {
 /// Input to the parallel pattern.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParallelInput<I> {
-    /// Activity inputs. Every task is launched simultaneously; the
-    /// pattern does not throttle concurrency itself — use the worker's
-    /// `max_concurrent_activities` setting.
+    /// Activity inputs.
     pub tasks: Vec<I>,
     /// What to do when a task fails. Default [`FailureStrategy::Continue`].
     #[serde(default, with = "failure_strategy_serde")]
     pub failure_strategy: FailureStrategy,
+    /// Maximum number of in-flight task futures at any moment.
+    ///
+    /// `0` (the default) means "no cap" — every task future is built
+    /// and polled up front, the historical behaviour. Set a positive
+    /// integer to bound memory and concurrency: at most `max_in_flight`
+    /// futures are alive simultaneously. This is **independent** of the
+    /// worker's `max_concurrent_activities` slot count — the worker cap
+    /// throttles activity dispatch, this cap throttles **how many
+    /// dispatch futures the pattern itself holds**, which matters for
+    /// payload memory and pre-dispatch validation cost on very wide
+    /// fan-outs (think 10K+ tasks).
+    #[serde(default)]
+    pub max_in_flight: usize,
 }
 
 impl<I: TaskInput> ParallelInput<I> {
@@ -171,6 +182,14 @@ pub struct LoopInput<I> {
     /// Failure strategy.
     #[serde(default, with = "failure_strategy_serde")]
     pub failure_strategy: FailureStrategy,
+    /// In-flight cap when [`parallel`] is true. `0` (default) means no
+    /// cap. See [`ParallelInput::max_in_flight`] for the operational
+    /// rationale.
+    ///
+    /// [`parallel`]: Self::parallel
+    /// [`ParallelInput::max_in_flight`]: crate::ParallelInput::max_in_flight
+    #[serde(default)]
+    pub max_in_flight: usize,
 }
 
 impl<I: TaskInput> LoopInput<I> {
@@ -200,6 +219,14 @@ pub struct ParameterizedLoopInput<I> {
     /// Failure strategy.
     #[serde(default, with = "failure_strategy_serde")]
     pub failure_strategy: FailureStrategy,
+    /// In-flight cap when [`parallel`] is true. `0` (default) means no
+    /// cap. See [`ParallelInput::max_in_flight`] for the operational
+    /// rationale.
+    ///
+    /// [`parallel`]: Self::parallel
+    /// [`ParallelInput::max_in_flight`]: crate::ParallelInput::max_in_flight
+    #[serde(default)]
+    pub max_in_flight: usize,
 }
 
 impl<I: TaskInput> ParameterizedLoopInput<I> {
@@ -333,6 +360,7 @@ mod tests {
             template: Step { ok: true },
             parallel: false,
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         match p.validate() {
             Err(Error::InvalidInput(msg)) => assert!(msg.contains("'k'")),
@@ -345,6 +373,7 @@ mod tests {
         let p = ParallelInput::<Step> {
             tasks: vec![Step { ok: true }],
             failure_strategy: FailureStrategy::FailFast,
+            max_in_flight: 0,
         };
         let s = serde_json::to_string(&p).unwrap();
         assert!(s.contains("fail_fast"));

@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::future::Future;
 
 use futures::future::join_all;
+use futures::stream::{self, StreamExt};
 
 use crate::dag::{DAGInput, DAGOutput, NodeResult};
 use crate::error::{Error, Result};
@@ -199,6 +200,7 @@ where
 /// let input = ParallelInput {
 ///     tasks: vec![Probe { url: "a".into() }, Probe { url: "b".into() }],
 ///     failure_strategy: FailureStrategy::FailFast,
+///     max_in_flight: 0,
 /// };
 /// let _out: ParallelOutput<ProbeOut> = parallel(input, |p| async move {
 ///     Ok(ProbeOut { ok: !p.url.is_empty() })
@@ -217,12 +219,31 @@ where
     Fut: Future<Output = Result<O>>,
 {
     input.validate()?;
-    let futures = input
-        .tasks
-        .into_iter()
-        .map(&execute_one)
-        .collect::<Vec<_>>();
-    let raw_results: Vec<Result<O>> = join_all(futures).await;
+    let max_in_flight = input.max_in_flight;
+    let raw_results: Vec<Result<O>> = if max_in_flight == 0 {
+        // No cap — equivalent to the historical `join_all` behaviour.
+        let futures = input
+            .tasks
+            .into_iter()
+            .map(&execute_one)
+            .collect::<Vec<_>>();
+        join_all(futures).await
+    } else {
+        // Bounded fan-out: at most `max_in_flight` futures alive at
+        // once. Tag each with its input index so the final output
+        // preserves input ordering.
+        let mut indexed: Vec<(usize, Result<O>)> =
+            stream::iter(input.tasks.into_iter().enumerate())
+                .map(|(idx, task)| {
+                    let fut = execute_one(task);
+                    async move { (idx, fut.await) }
+                })
+                .buffer_unordered(max_in_flight)
+                .collect()
+                .await;
+        indexed.sort_by_key(|(i, _)| *i);
+        indexed.into_iter().map(|(_, r)| r).collect()
+    };
 
     let mut results: Vec<O> = Vec::with_capacity(raw_results.len());
     let mut total_success = 0usize;
@@ -316,6 +337,7 @@ where
 ///     template: Deploy { region: "dep".into() },
 ///     parallel: true,
 ///     failure_strategy: FailureStrategy::Continue,
+///     max_in_flight: 0,
 /// };
 /// let _out: LoopOutput<DeployOut> = run_loop(input, sub, |d| async move {
 ///     Ok(DeployOut)
@@ -339,6 +361,7 @@ where
     let item_count = input.items.len();
     let template = input.template;
     let strategy = input.failure_strategy;
+    let max_in_flight = input.max_in_flight;
 
     let inputs: Vec<I> = input
         .items
@@ -347,7 +370,7 @@ where
         .map(|(i, item)| substitutor(&template, item.as_str(), i, &no_params))
         .collect();
 
-    let agg = run_iterations(inputs, input.parallel, strategy, execute_one).await?;
+    let agg = run_iterations(inputs, input.parallel, strategy, max_in_flight, execute_one).await?;
 
     Ok(LoopOutput {
         results: agg.results,
@@ -400,6 +423,7 @@ where
 ///     template: Probe { region: String::new(), tier: String::new() },
 ///     parallel: false,
 ///     failure_strategy: FailureStrategy::Continue,
+///     max_in_flight: 0,
 /// };
 /// let _out: LoopOutput<ProbeOut> = parameterized_loop(input, sub, |p| async move {
 ///     Ok(ProbeOut)
@@ -423,6 +447,7 @@ where
     let item_count = combinations.len();
     let template = input.template;
     let strategy = input.failure_strategy;
+    let max_in_flight = input.max_in_flight;
 
     let inputs: Vec<I> = combinations
         .into_iter()
@@ -430,7 +455,7 @@ where
         .map(|(i, params)| substitutor(&template, "", i, &params))
         .collect();
 
-    let agg = run_iterations(inputs, input.parallel, strategy, execute_one).await?;
+    let agg = run_iterations(inputs, input.parallel, strategy, max_in_flight, execute_one).await?;
 
     Ok(LoopOutput {
         results: agg.results,
@@ -454,6 +479,7 @@ async fn run_iterations<F, Fut, I, O>(
     inputs: Vec<I>,
     parallel_run: bool,
     failure_strategy: FailureStrategy,
+    max_in_flight: usize,
     execute_one: F,
 ) -> Result<LoopAggregate<O>>
 where
@@ -469,8 +495,21 @@ where
     let mut failure_reasons: Vec<String> = Vec::new();
 
     let outcomes: Vec<Result<O>> = if parallel_run {
-        let futures = inputs.into_iter().map(&execute_one).collect::<Vec<_>>();
-        join_all(futures).await
+        if max_in_flight == 0 {
+            let futures = inputs.into_iter().map(&execute_one).collect::<Vec<_>>();
+            join_all(futures).await
+        } else {
+            let mut indexed: Vec<(usize, Result<O>)> = stream::iter(inputs.into_iter().enumerate())
+                .map(|(idx, input)| {
+                    let fut = execute_one(input);
+                    async move { (idx, fut.await) }
+                })
+                .buffer_unordered(max_in_flight)
+                .collect()
+                .await;
+            indexed.sort_by_key(|(i, _)| *i);
+            indexed.into_iter().map(|(_, r)| r).collect()
+        }
     } else {
         let mut out = Vec::with_capacity(inputs.len());
         for input in inputs {
@@ -781,6 +820,7 @@ mod tests {
         let input = ParallelInput {
             tasks: vec![ok(1), fail(2), ok(3), ok(4)],
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let out: ParallelOutput<StepResult> = parallel(input, execute_step).await.unwrap();
         assert_eq!(out.results.len(), 4);
@@ -795,6 +835,7 @@ mod tests {
         let input = ParallelInput {
             tasks: vec![ok(1), fail(2), ok(3), fail(4)],
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let out: ParallelOutput<StepResult> =
             parallel(input, execute_with_activity_error).await.unwrap();
@@ -810,11 +851,99 @@ mod tests {
         assert!(out.failure_reasons[1].contains("activity boom for step 4"));
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn parallel_max_in_flight_caps_concurrency_but_preserves_input_order() {
+        // Pins the buffer_unordered + sort-by-index pattern: even when
+        // tasks complete out of order under a concurrency cap, the
+        // result vector matches input.tasks order, and the peak
+        // observed concurrency never exceeds `max_in_flight`.
+        use std::sync::atomic::{AtomicUsize, Ordering as AOrd};
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+
+        let input = ParallelInput {
+            tasks: (1..=10u32)
+                .map(|id| Step {
+                    id,
+                    will_fail: false,
+                })
+                .collect(),
+            failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 3,
+        };
+
+        let active_c = active.clone();
+        let peak_c = peak.clone();
+        let out: ParallelOutput<StepResult> = parallel(input, move |step: Step| {
+            let active = active_c.clone();
+            let peak = peak_c.clone();
+            async move {
+                let now = active.fetch_add(1, AOrd::SeqCst) + 1;
+                let mut p = peak.load(AOrd::SeqCst);
+                while now > p
+                    && peak
+                        .compare_exchange(p, now, AOrd::SeqCst, AOrd::SeqCst)
+                        .is_err()
+                {
+                    p = peak.load(AOrd::SeqCst);
+                }
+                // Yield so the scheduler can pull the next future into
+                // the buffer slot we just claimed.
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                active.fetch_sub(1, AOrd::SeqCst);
+                execute_step(step).await
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(out.results.len(), 10);
+        assert_eq!(out.total_success, 10);
+        // Results preserve input order.
+        for (i, step) in out.results.iter().enumerate() {
+            assert_eq!(step.id, u32::try_from(i + 1).unwrap());
+        }
+        assert!(
+            peak.load(AOrd::SeqCst) <= 3,
+            "peak concurrency {} exceeded cap of 3",
+            peak.load(AOrd::SeqCst),
+        );
+        assert!(
+            peak.load(AOrd::SeqCst) >= 2,
+            "peak concurrency {} suggests no concurrency at all",
+            peak.load(AOrd::SeqCst),
+        );
+    }
+
+    #[tokio::test]
+    async fn parallel_max_in_flight_zero_means_unlimited() {
+        // max_in_flight = 0 keeps historical join_all behaviour.
+        let input = ParallelInput {
+            tasks: (1..=5u32)
+                .map(|id| Step {
+                    id,
+                    will_fail: false,
+                })
+                .collect(),
+            failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
+        };
+        let out: ParallelOutput<StepResult> = parallel(input, execute_step).await.unwrap();
+        assert_eq!(out.results.len(), 5);
+        assert_eq!(out.total_success, 5);
+        // Results are in input order.
+        for (i, step) in out.results.iter().enumerate() {
+            assert_eq!(step.id, u32::try_from(i + 1).unwrap());
+        }
+    }
+
     #[tokio::test]
     async fn parallel_fail_fast_returns_first_failure() {
         let input = ParallelInput {
             tasks: vec![ok(1), fail(2), ok(3)],
             failure_strategy: FailureStrategy::FailFast,
+            max_in_flight: 0,
         };
         let res = parallel::<_, _, _, StepResult>(input, execute_step).await;
         assert!(matches!(res, Err(Error::PatternStopped { .. })));
@@ -828,6 +957,7 @@ mod tests {
             template: ok(0),
             parallel: false,
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let counter_clone = counter.clone();
         let substitutor: Substitutor<Step> = Arc::new(move |template, _item, idx, _params| {
@@ -852,6 +982,7 @@ mod tests {
             template: ok(0),
             parallel: false,
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let substitutor: Substitutor<Step> = Arc::new(|_template, item: &str, idx, _params| Step {
             id: u32::try_from(idx).unwrap(),
@@ -879,6 +1010,7 @@ mod tests {
             template: ok(0),
             parallel: false,
             failure_strategy: FailureStrategy::Continue,
+            max_in_flight: 0,
         };
         let substitutor: Substitutor<Step> = Arc::new(|_template, _item, idx, _params| Step {
             id: u32::try_from(idx).unwrap(),
