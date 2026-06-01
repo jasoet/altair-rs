@@ -121,6 +121,7 @@ async fn main() -> anyhow::Result<()> {
         },
         parallel: true,
         failure_strategy: FailureStrategy::Continue,
+        max_in_flight: 0,
     };
     let wf_id = format!("hello-loop-{}", std::process::id());
     let task_queue = cfg.task_queue.clone();

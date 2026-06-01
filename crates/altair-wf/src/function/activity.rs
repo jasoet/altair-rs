@@ -48,7 +48,7 @@ impl FunctionActivities {
     #[activity]
     pub async fn execute_function(
         self: Arc<Self>,
-        _ctx: ActivityContext,
+        ctx: ActivityContext,
         input: FunctionExecutionInput,
     ) -> std::result::Result<FunctionExecutionOutput, ActivityError> {
         tracing::info!(handler = %input.name, "function.execute: dispatching");
@@ -83,13 +83,48 @@ impl FunctionActivities {
         // on the hot path.
         let name = input.name.clone();
         let fn_input = input.into_function_input();
+
+        // If the activity options configure a heartbeat timeout,
+        // spawn a ticker that records a heartbeat at half the timeout
+        // interval. Without this, a long-running handler under a
+        // `heartbeat_timeout` setting would be killed even though it
+        // was making progress. The ticker is dropped (and the loop
+        // ends) the moment the handler future completes.
+        let heartbeat_interval = ctx.info().heartbeat_timeout.map(|d| d / 2);
+        let heartbeat_fut = async {
+            if let Some(interval) = heartbeat_interval
+                && !interval.is_zero()
+            {
+                let mut ticker = tokio::time::interval(interval);
+                // Skip the immediate first tick; first record fires
+                // at `interval` elapsed.
+                ticker.tick().await;
+                loop {
+                    ticker.tick().await;
+                    ctx.record_heartbeat(Vec::new());
+                }
+            }
+            // No heartbeat configured — sleep forever; the select will
+            // drop us when the handler finishes.
+            std::future::pending::<()>().await;
+        };
+
         // Catch handler panics so a single broken handler can't bring
         // the activity worker down. `AssertUnwindSafe` is sound here:
         // the inner future owns `fn_input` (moved in) and the wrapper
         // stored in the registry holds an `Arc<dyn Fn>` with no
         // interior mutability, so a mid-poll panic drops the future's
         // state cleanly without leaving any shared state inconsistent.
-        let result = AssertUnwindSafe(handler(fn_input)).catch_unwind().await;
+        let handler_fut = AssertUnwindSafe(handler(fn_input)).catch_unwind();
+        tokio::pin!(heartbeat_fut);
+        let result = tokio::select! {
+            biased;
+            r = handler_fut => r,
+            // Heartbeat loop never returns; this arm exists only to
+            // keep the ticker running concurrently. select! drops the
+            // losing branch when the handler completes.
+            () = &mut heartbeat_fut => unreachable!("heartbeat loop should never resolve"),
+        };
 
         let finished = started.elapsed();
         let finished_at_millis = unix_millis();

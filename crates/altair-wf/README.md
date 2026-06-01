@@ -88,6 +88,7 @@ let out: PipelineOutput<StepResult> = pipeline(input, dispatch).await?;
 let input = ParallelInput {
     tasks: vec![worker_1, worker_2, worker_3],
     failure_strategy: FailureStrategy::FailFast,
+    max_in_flight: 0, // 0 = no cap; set e.g. 50 to bound memory under fan-out
 };
 let out: ParallelOutput<StepResult> = parallel(input, dispatch).await?;
 ```
@@ -107,6 +108,7 @@ let input = LoopInput {
     template: my_task_template,
     parallel: true,
     failure_strategy: FailureStrategy::Continue,
+    max_in_flight: 0,
 };
 let out: LoopOutput<MyResult> = run_loop(input, substitutor, dispatch).await?;
 ```
@@ -122,6 +124,7 @@ let input = ParameterizedLoopInput {
     template,
     parallel: false,
     failure_strategy: FailureStrategy::FailFast,
+    max_in_flight: 0,
 };
 let out = parameterized_loop(input, substitutor, dispatch).await?; // 4 iterations
 ```
