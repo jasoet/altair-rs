@@ -74,11 +74,9 @@ pub struct PartitionResult<K> {
 /// **Not** the per-cycle [`crate::datasync::SyncResult`] returned by
 /// [`crate::datasync::Runner`] — that one is parameterless and tracks
 /// `WriteResult` totals; this one is keyed by `K` and aggregates
-/// partition-level outcomes. The prelude re-exports this as
-/// `ChunkSyncResult` to keep the two names distinct at glob-import
-/// sites.
+/// partition-level outcomes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncResult<K> {
+pub struct ChunkedSyncSummary<K> {
     /// Echo of the job name.
     pub job_name: String,
     /// Count of partitions processed this execution.
@@ -107,10 +105,10 @@ pub struct SyncResult<K> {
     pub deferred: bool,
 }
 
-// Hand-written `Default` so `SyncResult<K>` is usable when `K` itself
+// Hand-written `Default` so `ChunkedSyncSummary<K>` is usable when `K` itself
 // does not implement `Default` (e.g. when callers parameterise the
 // chunked sync over a custom key type).
-impl<K> Default for SyncResult<K> {
+impl<K> Default for ChunkedSyncSummary<K> {
     fn default() -> Self {
         Self {
             job_name: String::new(),
@@ -148,13 +146,13 @@ mod tests {
 
     #[test]
     fn sync_result_default_does_not_require_k_default() {
-        // Pins the hand-written `Default` impl: `SyncResult<K>::default()`
+        // Pins the hand-written `Default` impl: `ChunkedSyncSummary<K>::default()`
         // must compile and succeed even when `K` does not implement
         // `Default`. A future refactor switching to `#[derive(Default)]`
         // would break this.
         #[derive(Debug, Clone, PartialEq, Eq)]
         struct NoDefaultKey(i64);
-        let r: SyncResult<NoDefaultKey> = SyncResult::default();
+        let r: ChunkedSyncSummary<NoDefaultKey> = ChunkedSyncSummary::default();
         assert_eq!(r.job_name, "");
         assert_eq!(r.total_partitions, 0);
         assert!(r.partitions.is_empty());
@@ -196,7 +194,7 @@ mod tests {
 
     #[test]
     fn sync_result_serde_round_trip_with_partitions() {
-        let summary = SyncResult::<i64> {
+        let summary = ChunkedSyncSummary::<i64> {
             job_name: "j".into(),
             total_partitions: 1,
             total_fetched: 5,
@@ -214,7 +212,7 @@ mod tests {
             deferred: true,
         };
         let json = serde_json::to_string(&summary).unwrap();
-        let back: SyncResult<i64> = serde_json::from_str(&json).unwrap();
+        let back: ChunkedSyncSummary<i64> = serde_json::from_str(&json).unwrap();
         assert_eq!(back.job_name, "j");
         assert!(back.deferred);
         assert_eq!(back.total_fetched, 5);

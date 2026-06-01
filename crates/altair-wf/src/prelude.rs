@@ -51,15 +51,16 @@
 //! - When the `datasync` feature is enabled, the prelude re-exports the
 //!   core `Source` / `Mapper` / `Sink` traits, the `Runner` in-process
 //!   orchestrator, the chunked-sync helper and its `Cursor` /
-//!   `ChunkedSyncConfig` config types, plus `Partitioner` /
-//!   `ProgressTracker` for the chunk submodule.
+//!   `ChunkedSyncConfig` config types, `ChunkedSyncSummary` for the
+//!   workflow-level result, plus `Partitioner` / `ProgressTracker` for
+//!   the chunk submodule.
 
 pub use crate::{
     DAGInput, DAGNode, DAGOutput, Error, FailureStrategy, LoopInput, LoopOutput, NodeResult,
     ParallelInput, ParallelOutput, ParameterizedLoopInput, PipelineInput, PipelineOutput, Result,
     Substitutor, TaskInput, TaskOutput, default_activity_options, default_retry_policy, execute,
-    execute_with_timeout, generate_parameter_combinations, parallel, parameterized_loop, pipeline,
-    run_dag, run_loop, substitute_template, substitutor_from_fn,
+    generate_parameter_combinations, parallel, parameterized_loop, pipeline, run_dag, run_loop,
+    substitute_template, substitutor_from_fn,
 };
 
 // Mirror lib.rs's altair-temporal facade re-exports so a single
@@ -84,8 +85,8 @@ pub use crate::function::{
 // `datasync` module re-exports.
 #[cfg(feature = "datasync")]
 pub use crate::datasync::chunk::{
-    ChunkedSyncConfig, Cursor, Partition, PartitionResult, Partitioner, ProgressTracker,
-    SyncResult as ChunkSyncResult, chunked_sync_run, iterate_partitions,
+    ChunkedSyncConfig, ChunkedSyncSummary, Cursor, Partition, PartitionResult, Partitioner,
+    ProgressTracker, chunked_sync_run, iterate_partitions,
 };
 #[cfg(feature = "datasync")]
 pub use crate::datasync::{

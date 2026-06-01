@@ -10,8 +10,8 @@ use crate::datasync::sink::WriteResult;
 /// Outcome of a single fetch-map-write cycle as driven by [`Runner`].
 ///
 /// **Not** the chunked-workflow summary — see
-/// [`crate::datasync::chunk::SyncResult`] (re-exported via the prelude
-/// as `ChunkSyncResult`) for the partition-aware summary returned by
+/// [`crate::datasync::chunk::ChunkedSyncSummary`] for the
+/// partition-aware summary returned by
 /// [`crate::datasync::chunk::chunked_sync_run`].
 ///
 /// [`Runner`]: crate::datasync::Runner

@@ -1,7 +1,6 @@
 //! Input + output payload types for each pattern.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +52,13 @@ impl<I: TaskInput> PipelineInput<I> {
 }
 
 /// Aggregated result of a pipeline run.
+///
+/// **No wall-clock duration field.** Patterns are invoked from inside a
+/// Temporal `#[run]` workflow body where `Instant::now()` is replay-
+/// non-deterministic — measuring it here would corrupt history. Use
+/// Temporal's built-in workflow execution metrics, or measure inside
+/// the activities themselves (allowed; activities have non-deterministic
+/// contexts).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineOutput<O> {
     /// Per-step results in execution order. May be shorter than
@@ -62,9 +68,6 @@ pub struct PipelineOutput<O> {
     pub total_success: usize,
     /// Count of failing steps.
     pub total_failed: usize,
-    /// Wall-clock duration of the entire pipeline.
-    #[serde(with = "humantime_serde_compat")]
-    pub total_duration: Duration,
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +103,8 @@ impl<I: TaskInput> ParallelInput<I> {
 }
 
 /// Aggregated result of a parallel run.
+///
+/// See [`PipelineOutput`] for why there's no wall-clock duration field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParallelOutput<O> {
     /// Per-task results. Ordering matches `tasks` ordering, not
@@ -109,9 +114,6 @@ pub struct ParallelOutput<O> {
     pub total_success: usize,
     /// Count of failing tasks.
     pub total_failed: usize,
-    /// Wall-clock duration.
-    #[serde(with = "humantime_serde_compat")]
-    pub total_duration: Duration,
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +187,8 @@ impl<I: TaskInput> ParameterizedLoopInput<I> {
 }
 
 /// Aggregated result of a loop or parameterised-loop run.
+///
+/// See [`PipelineOutput`] for why there's no wall-clock duration field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopOutput<O> {
     /// Per-iteration results in iteration order.
@@ -193,9 +197,6 @@ pub struct LoopOutput<O> {
     pub total_success: usize,
     /// Failures.
     pub total_failed: usize,
-    /// Wall-clock duration.
-    #[serde(with = "humantime_serde_compat")]
-    pub total_duration: Duration,
     /// Number of iterations attempted (`items.len()` or the size of the
     /// cartesian product).
     pub item_count: usize,
@@ -233,20 +234,6 @@ mod failure_strategy_serde {
                 )));
             }
         })
-    }
-}
-
-mod humantime_serde_compat {
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::time::Duration;
-
-    pub fn serialize<S: Serializer>(d: &Duration, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u64(d.as_millis().try_into().unwrap_or(u64::MAX))
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(de: D) -> Result<Duration, D::Error> {
-        let ms = u64::deserialize(de)?;
-        Ok(Duration::from_millis(ms))
     }
 }
 
