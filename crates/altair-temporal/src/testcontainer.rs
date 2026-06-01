@@ -37,11 +37,14 @@ use testcontainers::{
 
 use crate::config::Config;
 
-/// Image tag used by [`TemporalContainer::start`]. Pinned to a known-good
-/// release for reproducibility; override with [`TemporalContainer::builder`]
-/// to upgrade. Refers to the Temporal CLI image, which bundles the dev
+/// Image tag used by [`TemporalContainer::start`].
+///
+/// Pinned to a specific Temporal CLI release for reproducibility — a
+/// floating `"latest"` is a CI-breakage time bomb on every upstream
+/// release. Override with [`TemporalContainer::builder`] to upgrade.
+/// Refers to the `temporalio/temporal` image, which bundles the dev
 /// server with embedded `SQLite`.
-pub const DEFAULT_IMAGE_TAG: &str = "latest";
+pub const DEFAULT_IMAGE_TAG: &str = "1.7.0";
 
 /// Default Temporal namespace created by `server start-dev`.
 pub const DEFAULT_NAMESPACE: &str = "default";
@@ -113,12 +116,17 @@ impl TemporalContainer {
     ///
     /// `task_queue` is the queue this worker/client targets — pick a unique
     /// string per test if you share a container across tests.
+    ///
+    /// The returned [`Config`] uses a **2-second** `shutdown_grace`
+    /// (not the prod-default 30s) so test cleanup doesn't block waiting
+    /// for an empty drain window.
     #[must_use]
     pub fn config(&self, task_queue: impl Into<String>) -> Config {
         Config {
             host: self.url(),
             namespace: self.namespace.clone(),
             task_queue: task_queue.into(),
+            shutdown_grace: std::time::Duration::from_secs(2),
             ..Config::default()
         }
     }

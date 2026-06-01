@@ -33,16 +33,43 @@ impl Client {
     /// Returns [`Error::Configuration`] if the host URL is invalid or TLS
     /// files cannot be read.  Returns [`Error::Connect`] if the gRPC
     /// channel cannot be established.
+    #[tracing::instrument(
+        skip(cfg),
+        fields(
+            host = %cfg.host,
+            namespace = %cfg.namespace,
+            tls = cfg.tls.is_some(),
+        ),
+    )]
     pub async fn from_config(cfg: &Config) -> Result<SdkClient> {
         let url = Url::parse(&cfg.host)
             .map_err(|e| Error::Configuration(format!("invalid host: {e}")))?;
 
+        // Warn loudly on a non-localhost plaintext connection. This is
+        // almost always a misconfiguration in prod.
+        if url.scheme() == "http" {
+            let host_str = url.host_str().unwrap_or("");
+            if host_str != "localhost" && host_str != "127.0.0.1" && host_str != "::1" {
+                tracing::warn!(
+                    host = %cfg.host,
+                    "connecting to non-localhost Temporal over plaintext HTTP — \
+                     production deployments should use TLS",
+                );
+            }
+        }
+
         // Build TLS options before starting the builder (bon state machine
         // can't be conditionally branched after `.identity()`).
-        let tls_opts = cfg.tls.as_ref().map(build_tls).transpose()?;
+        let tls_opts = match cfg.tls.as_ref() {
+            Some(t) => Some(build_tls(t).await?),
+            None => None,
+        };
 
+        // Only set identity when the operator opted in — otherwise
+        // the SDK picks `<pid>@<hostname>`, which is what we want
+        // in prod so each replica is distinguishable in the UI.
         let conn_opts = {
-            let b = ConnectionOptions::new(url).identity(cfg.identity.clone());
+            let b = ConnectionOptions::new(url).maybe_identity(cfg.identity.clone());
             if let Some(t) = tls_opts {
                 b.tls_options(t).build()
             } else {
@@ -61,21 +88,24 @@ impl Client {
     }
 }
 
-fn build_tls(cfg: &TlsConfig) -> Result<TlsOptions> {
-    let ca = std::fs::read(&cfg.server_root_ca_cert).map_err(|e| {
-        Error::Configuration(format!(
-            "read server_root_ca_cert ({}): {e}",
-            cfg.server_root_ca_cert.display()
-        ))
-    })?;
+async fn build_tls(cfg: &TlsConfig) -> Result<TlsOptions> {
+    let ca = match cfg.server_root_ca_cert.as_ref() {
+        Some(path) => Some(tokio::fs::read(path).await.map_err(|e| {
+            Error::Configuration(format!(
+                "read server_root_ca_cert ({}): {e}",
+                path.display()
+            ))
+        })?),
+        None => None,
+    };
 
     let client_tls = match (&cfg.client_cert, &cfg.client_key) {
         (None, None) => None,
         (Some(cert_path), Some(key_path)) => {
-            let cert = std::fs::read(cert_path).map_err(|e| {
+            let cert = tokio::fs::read(cert_path).await.map_err(|e| {
                 Error::Configuration(format!("read client_cert ({}): {e}", cert_path.display()))
             })?;
-            let key = std::fs::read(key_path).map_err(|e| {
+            let key = tokio::fs::read(key_path).await.map_err(|e| {
                 Error::Configuration(format!("read client_key ({}): {e}", key_path.display()))
             })?;
             Some(ClientTlsOptions {
@@ -91,7 +121,7 @@ fn build_tls(cfg: &TlsConfig) -> Result<TlsOptions> {
     };
 
     Ok(TlsOptions {
-        server_root_ca_cert: Some(ca),
+        server_root_ca_cert: ca,
         domain: cfg.server_name_override.clone(),
         client_tls_options: client_tls,
     })

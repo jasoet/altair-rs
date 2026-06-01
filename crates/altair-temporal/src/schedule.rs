@@ -7,6 +7,13 @@
 //! is allowed — Temporal accepts and runs the union. Most callers will
 //! pick one. Callers wanting strictly one ensure they only call that one.
 
+// `tracing::instrument` attaches a `Drop`-guarded span to the function
+// body; under Rust 2024's tail-expr-drop-order rule this changes the
+// drop order of locals borrowed by the tail expression. The schedule
+// helpers don't carry side effects in `Drop`, so the change is
+// observationally neutral — silence the lint here.
+#![allow(tail_expr_drop_order)]
+
 use std::time::Duration;
 
 use temporalio_client::schedules::{
@@ -20,6 +27,7 @@ use crate::error::{Error, Result};
 pub struct Schedule {
     pub(crate) cron_strings: Vec<String>,
     pub(crate) intervals: Vec<Duration>,
+    pub(crate) timezone: Option<String>,
     pub(crate) note: Option<String>,
     pub(crate) paused: bool,
     pub(crate) workflow_type: Option<String>,
@@ -35,6 +43,7 @@ impl Schedule {
             schedule: Schedule {
                 cron_strings: Vec::new(),
                 intervals: Vec::new(),
+                timezone: None,
                 note: None,
                 paused: false,
                 workflow_type: None,
@@ -63,6 +72,18 @@ impl ScheduleBuilder {
     #[must_use]
     pub fn interval(mut self, d: Duration) -> Self {
         self.schedule.intervals.push(d);
+        self
+    }
+
+    /// Set the IANA timezone the schedule's cron expressions are
+    /// interpreted in (e.g. `"US/Eastern"`, `"Asia/Jakarta"`).
+    ///
+    /// Defaults to UTC if unset — which means a `"0 0 * * *"` cron
+    /// fires at midnight UTC, **not** the operator's local midnight.
+    /// Set this explicitly for any human-facing schedule.
+    #[must_use]
+    pub fn timezone(mut self, tz: impl Into<String>) -> Self {
+        self.schedule.timezone = Some(tz.into());
         self
     }
 
@@ -101,12 +122,18 @@ impl ScheduleBuilder {
     }
 
     /// Create the schedule on the server.
+    ///
+    /// Fails with [`Error::Schedule`] if a schedule with the same id
+    /// already exists — use [`ScheduleBuilder::create_or_update`] for
+    /// the idempotent path.
+    #[tracing::instrument(skip_all, fields(schedule_id))]
     pub async fn create(
         self,
         client: &temporalio_client::Client,
         id: impl Into<String>,
     ) -> Result<()> {
         let id = id.into();
+        tracing::Span::current().record("schedule_id", id.as_str());
         let schedule = self.build();
         validate_schedule(&schedule)?;
         let opts = to_create_options(&schedule);
@@ -120,12 +147,14 @@ impl ScheduleBuilder {
     /// Update an existing schedule on the server.
     ///
     /// Replaces spec / paused / note on the existing schedule.
+    #[tracing::instrument(skip_all, fields(schedule_id))]
     pub async fn update(
         self,
         client: &temporalio_client::Client,
         id: impl Into<String>,
     ) -> Result<()> {
         let id = id.into();
+        tracing::Span::current().record("schedule_id", id.as_str());
         let schedule = self.build();
         validate_schedule(&schedule)?;
         let spec = to_spec(&schedule);
@@ -143,15 +172,57 @@ impl ScheduleBuilder {
             .await
             .map_err(|e| Error::schedule(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))
     }
+
+    /// Create the schedule, or update the existing one if it already
+    /// exists. The idempotent path for deploy / redeploy flows.
+    #[tracing::instrument(skip_all, fields(schedule_id))]
+    pub async fn create_or_update(
+        self,
+        client: &temporalio_client::Client,
+        id: impl Into<String>,
+    ) -> Result<()> {
+        let id = id.into();
+        tracing::Span::current().record("schedule_id", id.as_str());
+        // Clone once so we can fall back to update().
+        let cloned = self.clone();
+        match self.create(client, id.clone()).await {
+            Ok(()) => Ok(()),
+            Err(Error::Schedule { .. }) => {
+                tracing::info!("schedule already exists; updating");
+                cloned.update(client, id).await
+            }
+            Err(other) => Err(other),
+        }
+    }
 }
 
 /// Delete a schedule by id.
+///
+/// Fails with [`Error::Schedule`] if the schedule does not exist —
+/// use [`delete_if_exists`] for the idempotent path.
+#[tracing::instrument(skip(client))]
 pub async fn delete(client: &temporalio_client::Client, id: &str) -> Result<()> {
     let handle = client.get_schedule_handle(id);
     handle
         .delete()
         .await
         .map_err(|e| Error::schedule(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))
+}
+
+/// Delete a schedule by id, treating "not found" as success.
+///
+/// Use this when tearing down a deployment whose schedule may or may
+/// not have been provisioned.
+#[tracing::instrument(skip(client))]
+pub async fn delete_if_exists(client: &temporalio_client::Client, id: &str) -> Result<()> {
+    match delete(client, id).await {
+        Ok(()) => Ok(()),
+        Err(Error::Schedule { .. }) => {
+            tracing::debug!("schedule did not exist; treating delete as no-op");
+            Ok(())
+        }
+        Err(other) => Err(other),
+    }
 }
 
 fn to_spec(s: &Schedule) -> ScheduleSpec {
@@ -162,6 +233,7 @@ fn to_spec(s: &Schedule) -> ScheduleSpec {
             .iter()
             .map(|d| ScheduleIntervalSpec::new(*d, None))
             .collect(),
+        timezone_name: s.timezone.clone().unwrap_or_default(),
         ..Default::default()
     }
 }

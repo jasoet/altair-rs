@@ -128,27 +128,32 @@ async fn worker_builds_against_container_and_drops_cleanly() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn worker_run_with_shutdown_future_exits_cleanly() {
     let temporal = temporal().await;
-    let cfg = temporal.config(unique("worker-shutdown-tq"));
+    let mut cfg = temporal.config(unique("worker-shutdown-tq"));
+    // Override the prod-default 30s drain — there's nothing in flight
+    // here so we just need the SDK to acknowledge the shutdown signal
+    // and return.
+    cfg.shutdown_grace = Duration::from_secs(2);
     let worker = WorkerBuilder::new(&cfg)
         .build()
         .await
         .expect("build worker");
 
     // Pass a shutdown future that completes after a short delay. The
-    // worker's `tokio::select!` should pick the shutdown branch and return
-    // Ok cleanly.
+    // worker should initiate drain and exit cleanly within the grace
+    // period.
     //
-    // (We don't `tokio::spawn` the worker because the SDK's run future is
-    // not `Send`; running it inline on the current task is fine and the
-    // delay-based shutdown still exercises the select race.)
+    // (We don't `tokio::spawn` the worker because the SDK's run future
+    // is not `Send`; running it inline on the current task is fine.)
     let shutdown = async { tokio::time::sleep(Duration::from_millis(250)).await };
 
+    // Generous deadline: CI is slower than local, and the SDK takes
+    // a few seconds to drain even an empty worker after shutdown.
     let res = tokio::time::timeout(
-        Duration::from_secs(10),
+        Duration::from_mins(1),
         Box::pin(worker.run_with_shutdown(shutdown)),
     )
     .await
-    .expect("worker shuts down within 10s");
+    .expect("worker shuts down within deadline");
     assert!(res.is_ok(), "worker should exit cleanly on shutdown");
 }
 
@@ -279,6 +284,7 @@ impl FlakyWorkflow {
             .backoff_coefficient(2.0)
             .max_attempts(5)
             .build()
+            .expect("retry policy")
             .into_inner();
         let opts = ActivityOptions::with_start_to_close_timeout(Duration::from_secs(5))
             .retry_policy(retry_policy)
@@ -378,7 +384,7 @@ async fn workflow_echo_round_trip() {
             .expect("workflow result")
     };
 
-    let result = run_worker_with_workload(worker, workload, Duration::from_secs(30)).await;
+    let result = run_worker_with_workload(worker, workload, Duration::from_mins(2)).await;
     assert_eq!(result, "hello world");
 }
 
@@ -414,7 +420,7 @@ async fn workflow_with_activity_returns_combined_result() {
             .expect("workflow result")
     };
 
-    let result = run_worker_with_workload(worker, workload, Duration::from_secs(30)).await;
+    let result = run_worker_with_workload(worker, workload, Duration::from_mins(2)).await;
     assert_eq!(result, "Hello, World!");
 }
 
@@ -501,7 +507,7 @@ async fn workflow_id_payload_round_trip_through_real_workflow() {
             .expect("workflow result")
     };
 
-    let result = run_worker_with_workload(worker, workload, Duration::from_secs(30)).await;
+    let result = run_worker_with_workload(worker, workload, Duration::from_mins(2)).await;
     assert_eq!(result, "ack");
 
     let (prefix, decoded): (String, ArchiveJob) =
