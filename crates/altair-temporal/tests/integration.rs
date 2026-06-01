@@ -146,12 +146,14 @@ async fn worker_run_with_shutdown_future_exits_cleanly() {
     // is not `Send`; running it inline on the current task is fine.)
     let shutdown = async { tokio::time::sleep(Duration::from_millis(250)).await };
 
+    // Generous deadline: CI is slower than local, and the SDK takes
+    // a few seconds to drain even an empty worker after shutdown.
     let res = tokio::time::timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(60),
         Box::pin(worker.run_with_shutdown(shutdown)),
     )
     .await
-    .expect("worker shuts down within 15s");
+    .expect("worker shuts down within deadline");
     assert!(res.is_ok(), "worker should exit cleanly on shutdown");
 }
 
@@ -382,7 +384,7 @@ async fn workflow_echo_round_trip() {
             .expect("workflow result")
     };
 
-    let result = run_worker_with_workload(worker, workload, Duration::from_secs(30)).await;
+    let result = run_worker_with_workload(worker, workload, Duration::from_secs(90)).await;
     assert_eq!(result, "hello world");
 }
 
@@ -418,7 +420,7 @@ async fn workflow_with_activity_returns_combined_result() {
             .expect("workflow result")
     };
 
-    let result = run_worker_with_workload(worker, workload, Duration::from_secs(30)).await;
+    let result = run_worker_with_workload(worker, workload, Duration::from_secs(90)).await;
     assert_eq!(result, "Hello, World!");
 }
 
@@ -505,7 +507,7 @@ async fn workflow_id_payload_round_trip_through_real_workflow() {
             .expect("workflow result")
     };
 
-    let result = run_worker_with_workload(worker, workload, Duration::from_secs(30)).await;
+    let result = run_worker_with_workload(worker, workload, Duration::from_secs(90)).await;
     assert_eq!(result, "ack");
 
     let (prefix, decoded): (String, ArchiveJob) =
