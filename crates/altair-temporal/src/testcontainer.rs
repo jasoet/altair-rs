@@ -116,12 +116,17 @@ impl TemporalContainer {
     ///
     /// `task_queue` is the queue this worker/client targets — pick a unique
     /// string per test if you share a container across tests.
+    ///
+    /// The returned [`Config`] uses a **2-second** `shutdown_grace`
+    /// (not the prod-default 30s) so test cleanup doesn't block waiting
+    /// for an empty drain window.
     #[must_use]
     pub fn config(&self, task_queue: impl Into<String>) -> Config {
         Config {
             host: self.url(),
             namespace: self.namespace.clone(),
             task_queue: task_queue.into(),
+            shutdown_grace: std::time::Duration::from_secs(2),
             ..Config::default()
         }
     }
