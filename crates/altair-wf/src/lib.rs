@@ -1,20 +1,46 @@
-//! Reusable Temporal workflow patterns: single-task execution, pipeline
-//! (sequential), parallel, loop (and parameterized loop), and DAG with
-//! cycle detection.
+//! Reusable Temporal workflow patterns + two opt-in feature modules.
 //!
 //! Built on [`altair-temporal`](https://crates.io/crates/altair-temporal),
 //! the workspace's stable facade over the pre-1.0 `temporalio-*` Rust SDK.
 //!
+//! # Crate surface
+//!
+//! ## Always available
+//!
+//! - **Core patterns** (this module's re-exports): [`pipeline`],
+//!   [`parallel`], [`run_loop`], [`parameterized_loop`], [`run_dag`],
+//!   [`execute`]. Generic async helpers consumed from inside a user's
+//!   own `#[workflow]` definition — the caller owns the workflow type,
+//!   the patterns own the orchestration logic.
+//!
+//! ## Opt-in features
+//!
+//! - **`function`** — `altair_wf::function`: named-handler registry +
+//!   a single Temporal activity (`FunctionActivities::execute_function`)
+//!   that dispatches by name. Compose with the core patterns to express
+//!   "run this batch of named jobs".
+//! - **`datasync`** — `altair_wf::datasync`: a `Source` -> `Mapper` ->
+//!   `Sink` pipeline (in-process `Runner`) plus a `chunk` submodule
+//!   that adds partitioned, resumable orchestration with
+//!   continue-as-new support.
+//!
 //! # Design
 //!
-//! Each pattern is a generic async helper consumed from inside a user's
-//! own `#[workflow]` definition — the caller owns the workflow type, the
-//! patterns own the orchestration logic. Activity dispatch is **typed**:
-//! pass an `ActivityDefinition` (a function reference from an
-//! `#[activities]` impl block) to the pattern; do not rely on string
-//! activity names. This is a deliberate divergence from the
-//! Go [`github.com/jasoet/go-wf`](https://github.com/jasoet/go-wf)
-//! library this crate ports, which uses runtime string dispatch.
+//! Activity dispatch is **typed**: pass an `ActivityDefinition` (a
+//! function reference from an `#[activities]` impl block) to the
+//! pattern; do not rely on string activity names. This is a deliberate
+//! divergence from the Go
+//! [`github.com/jasoet/go-wf`](https://github.com/jasoet/go-wf) library
+//! this crate ports, which uses runtime string dispatch.
+//!
+//! # Determinism
+//!
+//! Every helper that runs inside a workflow body avoids
+//! `Instant::now()`, `tokio::time::sleep`, RNG, and other
+//! replay-non-deterministic operations. Pattern outputs **do not**
+//! include wall-clock duration fields — measure timing inside your
+//! activities (where non-determinism is allowed) or rely on Temporal's
+//! built-in workflow execution metrics.
 //!
 //! # Example
 //!
@@ -63,9 +89,7 @@ pub use helpers::{
     FailureStrategy, default_activity_options, default_retry_policy,
     generate_parameter_combinations, substitute_template, substitutor_from_fn,
 };
-pub use patterns::{
-    execute, execute_with_timeout, parallel, parameterized_loop, pipeline, run_dag, run_loop,
-};
+pub use patterns::{execute, parallel, parameterized_loop, pipeline, run_dag, run_loop};
 pub use traits::{TaskInput, TaskOutput};
 pub use types::{
     LoopInput, LoopOutput, ParallelInput, ParallelOutput, ParameterizedLoopInput, PipelineInput,

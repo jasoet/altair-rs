@@ -2,7 +2,6 @@
 //! detection, duplicate-name detection).
 
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -203,15 +202,16 @@ pub struct NodeResult<O> {
     /// Error message if the node failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    /// Per-node duration.
-    #[serde(with = "duration_serde")]
-    pub duration: Duration,
     /// Whether the node succeeded (mirrors `result.is_some()` when
     /// activity succeeded AND `is_success()` returned true).
     pub success: bool,
 }
 
 /// Aggregated DAG result.
+///
+/// No wall-clock duration field — `run_dag` runs inside a workflow body
+/// where `Instant::now()` is replay non-deterministic. Use Temporal's
+/// built-in metrics or measure inside the activities.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DAGOutput<O> {
     /// Map of node name → output for nodes that succeeded.
@@ -222,23 +222,6 @@ pub struct DAGOutput<O> {
     pub total_success: usize,
     /// Failures.
     pub total_failed: usize,
-    /// Wall-clock duration of the full DAG.
-    #[serde(with = "duration_serde")]
-    pub total_duration: Duration,
-}
-
-mod duration_serde {
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::time::Duration;
-
-    pub fn serialize<S: Serializer>(d: &Duration, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u64(d.as_millis().try_into().unwrap_or(u64::MAX))
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(de: D) -> Result<Duration, D::Error> {
-        let ms = u64::deserialize(de)?;
-        Ok(Duration::from_millis(ms))
-    }
 }
 
 // Manually implement TaskOutput-shape helpers on NodeResult so DAG

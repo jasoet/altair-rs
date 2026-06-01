@@ -1025,7 +1025,7 @@ async fn function_parallel_fail_fast_fails_workflow_on_handler_unsuccessful_outp
 // ---------------------------------------------------------------------------
 
 use altair_wf::datasync::chunk::{
-    ChunkedSyncConfig, Cursor, Partition, PartitionResult, SyncResult, chunked_sync_run,
+    ChunkedSyncConfig, ChunkedSyncSummary, Cursor, Partition, PartitionResult, chunked_sync_run,
 };
 
 // In-memory shared state for the datasync activities. Captures the
@@ -1106,6 +1106,12 @@ pub struct DatasyncInput {
     pub job: String,
     pub use_cursor: bool,
     pub max_per_exec: usize,
+    /// When true, the workflow body issues `ctx.continue_as_new(...)`
+    /// whenever the chunked-sync helper returns `deferred = true`. When
+    /// false, it returns the truncated summary instead — used by the
+    /// "just exercise the truncation" tests.
+    #[serde(default)]
+    pub chain_continue_as_new: bool,
 }
 impl TaskInput for DatasyncInput {}
 
@@ -1119,7 +1125,7 @@ impl DatasyncWf {
     pub async fn run(
         ctx: &mut WorkflowContext<Self>,
         input: DatasyncInput,
-    ) -> WorkflowResult<SyncResult<i64>> {
+    ) -> WorkflowResult<ChunkedSyncSummary<i64>> {
         let opts = default_activity_options();
         let ctx_ref: &WorkflowContext<Self> = ctx;
 
@@ -1187,6 +1193,16 @@ impl DatasyncWf {
         let result = chunked_sync_run(cfg, list, run, cursor, |_d| async {})
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        if result.deferred && input.chain_continue_as_new {
+            // Hand the rest off to a fresh execution with the same
+            // input — the cursor (which advance_cursor already updated
+            // for the partitions processed this run) lets the next
+            // execution skip them.
+            use altair_temporal::temporalio_sdk::ContinueAsNewOptions;
+            ctx_ref.continue_as_new(&input, ContinueAsNewOptions::default())?;
+            unreachable!("continue_as_new always returns Err");
+        }
         Ok(result)
     }
 }
@@ -1230,6 +1246,7 @@ async fn datasync_chunked_run_without_cursor_visits_every_partition() {
             job: "ds-1".into(),
             use_cursor: false,
             max_per_exec: 0,
+            chain_continue_as_new: false,
         };
         let handle = client
             .start_workflow(
@@ -1245,7 +1262,8 @@ async fn datasync_chunked_run_without_cursor_visits_every_partition() {
             .expect("workflow result")
     };
 
-    let out: SyncResult<i64> = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    let out: ChunkedSyncSummary<i64> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
     assert_eq!(out.job_name, "ds-1");
     assert_eq!(out.total_partitions, 3);
     assert_eq!(out.total_fetched, 5 + 3 + 7);
@@ -1283,6 +1301,7 @@ async fn datasync_chunked_run_with_cursor_skips_processed_partitions() {
             job: "ds-2".into(),
             use_cursor: true,
             max_per_exec: 0,
+            chain_continue_as_new: false,
         };
         let handle = client
             .start_workflow(
@@ -1298,7 +1317,8 @@ async fn datasync_chunked_run_with_cursor_skips_processed_partitions() {
             .expect("workflow result")
     };
 
-    let out: SyncResult<i64> = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    let out: ChunkedSyncSummary<i64> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
     // cursor=15 keeps only start>=15, i.e. [20, 30) — 1 partition, 3 records.
     assert_eq!(out.total_partitions, 1);
     assert_eq!(out.total_fetched, 3);
@@ -1330,6 +1350,7 @@ async fn datasync_chunked_run_truncates_to_max_and_sets_deferred() {
             job: "ds-3".into(),
             use_cursor: true,
             max_per_exec: 3,
+            chain_continue_as_new: false,
         };
         let handle = client
             .start_workflow(
@@ -1345,10 +1366,82 @@ async fn datasync_chunked_run_truncates_to_max_and_sets_deferred() {
             .expect("workflow result")
     };
 
-    let out: SyncResult<i64> = run_with_workload(worker, workload, Duration::from_secs(60)).await;
+    let out: ChunkedSyncSummary<i64> =
+        run_with_workload(worker, workload, Duration::from_secs(60)).await;
     assert_eq!(out.total_partitions, 3);
     assert!(out.deferred, "expected deferred=true when truncated");
     // Advance recorded for each of the 3 processed partitions, capturing
     // their `end` values: 10, 20, 30.
     assert_eq!(*cap_state.advance_calls.lock().unwrap(), vec![10, 20, 30],);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn datasync_chunked_run_continue_as_new_processes_all_partitions_across_executions() {
+    // The most load-bearing untested path: when `max_partitions_per_execution`
+    // truncates the partition list, the workflow body issues
+    // continue_as_new with the same input; the cursor advanced during
+    // the first execution lets the second execution skip the processed
+    // prefix. After both executions complete, every partition has been
+    // processed exactly once.
+    let records: HashMap<i64, usize> = (0..6).map(|i| (i * 10, 2usize)).collect();
+    let state = Arc::new(DatasyncState {
+        partitions: (0..6)
+            .map(|i| Partition::new(i * 10, (i + 1) * 10))
+            .collect(),
+        records_per_partition: records,
+        ..DatasyncState::default()
+    });
+
+    let tq = unique("wf-ds-can");
+    let worker = build_datasync_worker(&tq, state.clone()).await;
+    let client = temporal_client().await;
+    let wf_id = unique("ds-can-wid");
+    let tq_clone = tq.clone();
+    let cap_state = state.clone();
+
+    let workload = async move {
+        let input = DatasyncInput {
+            job: "ds-can".into(),
+            use_cursor: true,
+            max_per_exec: 2, // 6 partitions / 2 per exec → 3 executions
+            chain_continue_as_new: true,
+        };
+        let handle = client
+            .start_workflow(
+                DatasyncWf::run,
+                input,
+                WorkflowStartOptions::new(&tq_clone, &wf_id).build(),
+            )
+            .await
+            .expect("start workflow");
+        // `get_result` follows continue_as_new chains transparently —
+        // returns the final execution's result.
+        handle
+            .get_result(WorkflowGetResultOptions::default())
+            .await
+            .expect("workflow result")
+    };
+
+    let out: ChunkedSyncSummary<i64> =
+        run_with_workload(worker, workload, Duration::from_secs(120)).await;
+
+    // Last execution sees the final two partitions and returns without
+    // deferring further.
+    assert!(!out.deferred, "final execution should not defer");
+    assert_eq!(out.total_partitions, 2);
+
+    // Across all three executions: every partition processed exactly
+    // once, every advance recorded once.
+    let advances = cap_state.advance_calls.lock().unwrap().clone();
+    assert_eq!(
+        advances,
+        vec![10, 20, 30, 40, 50, 60],
+        "expected advance to be called once per partition end",
+    );
+    let fetches = cap_state.fetch_calls.lock().unwrap().clone();
+    assert_eq!(
+        fetches,
+        vec![0, 10, 20, 30, 40, 50],
+        "expected fetch to be called once per partition start",
+    );
 }

@@ -45,6 +45,23 @@ where
         }
     }
 
+    /// Build a runner from a fully-validated [`Job`]. Convenience for
+    /// the common "I already built a `Job` via the builder — run it
+    /// in-process" path. The runner clones the job's `Arc<dyn ...>`
+    /// trio; the [`Job`]'s schedule + retry/timeout fields are
+    /// ignored here (they're workflow-side metadata) and remain
+    /// available on the job for the caller's workflow wiring.
+    ///
+    /// [`Job`]: crate::datasync::Job
+    #[must_use]
+    pub fn from_job(job: &crate::datasync::Job<T, U>) -> Self {
+        Self::new(
+            Arc::clone(&job.source),
+            Arc::clone(&job.mapper),
+            Arc::clone(&job.sink),
+        )
+    }
+
     /// Run one fetch-map-write cycle. Returns a [`SyncResult`] with the
     /// fetch count, sink tally, and wall-clock processing time.
     ///
@@ -55,6 +72,8 @@ where
     /// `activity` field carries the stage label plus the source/sink
     /// name where applicable.
     pub async fn run(&self) -> Result<SyncResult> {
+        // `Runner::run` is an in-process driver — NOT called from inside
+        // a Temporal workflow body — so `Instant::now()` is fine here.
         let started = Instant::now();
 
         let records = self
@@ -153,6 +172,27 @@ mod tests {
         assert_eq!(out.total_fetched, 3);
         assert_eq!(out.write_result.inserted, 3);
         assert_eq!(*sink.inner.lock().unwrap(), vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn runner_from_job_reuses_jobs_trio() {
+        use crate::datasync::SyncJobBuilder;
+        use std::time::Duration;
+        let sink = Arc::new(CountingSink {
+            inner: std::sync::Mutex::new(Vec::new()),
+        });
+        let job = SyncJobBuilder::<i32, i32>::new("j")
+            .source(Arc::new(VecSource(vec![10, 20, 30])))
+            .mapper(Arc::new(IdentityMapper::new()))
+            .sink(sink.clone())
+            .schedule(Duration::from_mins(1))
+            .build()
+            .unwrap();
+        let runner = Runner::from_job(&job);
+        let out = runner.run().await.unwrap();
+        assert_eq!(out.total_fetched, 3);
+        assert_eq!(out.write_result.inserted, 3);
+        assert_eq!(*sink.inner.lock().unwrap(), vec![10, 20, 30]);
     }
 
     #[tokio::test]

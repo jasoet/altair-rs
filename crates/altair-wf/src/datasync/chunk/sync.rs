@@ -25,7 +25,7 @@
 use std::future::Future;
 use std::time::Duration;
 
-use crate::datasync::chunk::partition::{Partition, PartitionResult, SyncResult};
+use crate::datasync::chunk::partition::{ChunkedSyncSummary, Partition, PartitionResult};
 use crate::error::Result;
 
 /// Configuration for [`chunked_sync_run`].
@@ -37,7 +37,7 @@ use crate::error::Result;
 /// sites mean different things.
 #[derive(Debug, Clone)]
 pub struct ChunkedSyncConfig {
-    /// Echoed into [`SyncResult::job_name`].
+    /// Echoed into [`ChunkedSyncSummary::job_name`].
     pub(crate) job_name: String,
     /// Sleep duration inserted between partition activity calls. Zero
     /// disables the inter-partition delay.
@@ -184,7 +184,7 @@ pub async fn chunked_sync_run<
     mut run_partition: RunFn,
     cursor: Cursor<ReadFn, AdvFn>,
     mut sleeper: SleepFn,
-) -> Result<SyncResult<K>>
+) -> Result<ChunkedSyncSummary<K>>
 where
     K: Ord + Clone + Send + Sync + 'static,
     ListFn: FnOnce() -> ListFut,
@@ -204,9 +204,9 @@ where
         ));
     }
 
-    let mut summary = SyncResult::<K> {
+    let mut summary = ChunkedSyncSummary::<K> {
         job_name: config.job_name.clone(),
-        ..SyncResult::default()
+        ..ChunkedSyncSummary::default()
     };
 
     let mut parts = list_partitions().await?;

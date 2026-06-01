@@ -136,7 +136,7 @@ parallel:
 
 | Pattern | Closure bound | Reason |
 |---|---|---|
-| `execute` / `execute_with_timeout` / `pipeline` | `FnMut(I) -> Future<O>` | Closure runs one at a time; mutable state allowed. |
+| `execute` / `pipeline` | `FnMut(I) -> Future<O>` | Closure runs one at a time; mutable state allowed. |
 | `parallel` / `run_loop` / `parameterized_loop` / `run_dag` | `Fn(I) -> Future<O>` | Closure is reused across many in-flight futures (`join_all`). Capture via `Arc<Mutex<_>>` if you need mutation. |
 
 When you call a `Fn`-bound pattern from inside a `#[run]` method, the

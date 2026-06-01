@@ -8,8 +8,6 @@
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::time::Duration;
-use std::time::Instant;
 
 use futures::future::join_all;
 
@@ -75,47 +73,6 @@ where
     execute_one(input).await
 }
 
-/// `execute` with a per-call timeout enforced by `tokio::time::timeout`.
-/// Returns [`Error::PatternStopped`] on timeout.
-///
-/// # Examples
-///
-/// ```no_run
-/// # async fn ex() -> altair_wf::Result<()> {
-/// use std::time::Duration;
-/// use altair_wf::{execute_with_timeout, TaskInput, TaskOutput};
-///
-/// #[derive(Clone)]
-/// struct Slow;
-/// impl TaskInput for Slow {}
-/// struct SlowOut;
-/// impl TaskOutput for SlowOut { fn is_success(&self) -> bool { true } }
-///
-/// let _out: SlowOut = execute_with_timeout(Slow, Duration::from_secs(30), |_| async {
-///     Ok(SlowOut)
-/// }).await?;
-/// # Ok(()) }
-/// ```
-pub async fn execute_with_timeout<F, Fut, I, O>(
-    input: I,
-    timeout: Duration,
-    execute_one: F,
-) -> Result<O>
-where
-    I: TaskInput,
-    O: TaskOutput,
-    F: FnMut(I) -> Fut,
-    Fut: Future<Output = Result<O>>,
-{
-    match tokio::time::timeout(timeout, execute(input, execute_one)).await {
-        Ok(res) => res,
-        Err(_) => Err(Error::PatternStopped {
-            position: "0".into(),
-            reason: format!("execute timed out after {timeout:?}"),
-        }),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Pipeline (sequential)
 // ---------------------------------------------------------------------------
@@ -161,7 +118,6 @@ where
     Fut: Future<Output = Result<O>>,
 {
     input.validate()?;
-    let start = Instant::now();
     let mut results: Vec<O> = Vec::with_capacity(input.tasks.len());
     let mut total_success = 0usize;
     let mut total_failed = 0usize;
@@ -201,7 +157,6 @@ where
         results,
         total_success,
         total_failed,
-        total_duration: start.elapsed(),
     })
 }
 
@@ -248,7 +203,6 @@ where
     Fut: Future<Output = Result<O>>,
 {
     input.validate()?;
-    let start = Instant::now();
     let futures = input
         .tasks
         .into_iter()
@@ -293,7 +247,6 @@ where
         results,
         total_success,
         total_failed,
-        total_duration: start.elapsed(),
     })
 }
 
@@ -358,7 +311,6 @@ where
     Fut: Future<Output = Result<O>>,
 {
     input.validate()?;
-    let start = Instant::now();
     let no_params: HashMap<String, String> = HashMap::new();
     let item_count = input.items.len();
     let template = input.template;
@@ -378,7 +330,6 @@ where
         results,
         total_success,
         total_failed,
-        total_duration: start.elapsed(),
         item_count,
     })
 }
@@ -442,7 +393,6 @@ where
     Fut: Future<Output = Result<O>>,
 {
     input.validate()?;
-    let start = Instant::now();
     let combinations = generate_parameter_combinations(&input.parameters);
     let item_count = combinations.len();
     let template = input.template;
@@ -461,7 +411,6 @@ where
         results,
         total_success,
         total_failed,
-        total_duration: start.elapsed(),
         item_count,
     })
 }
@@ -570,7 +519,6 @@ where
     Fut: Future<Output = Result<O>>,
 {
     input.validate()?;
-    let start = Instant::now();
     let layers = input.topological_layers();
     let nodes = input.nodes;
 
@@ -584,22 +532,10 @@ where
             .iter()
             .map(|&idx| (nodes[idx].name.clone(), nodes[idx].input.clone()))
             .collect();
-        // Wrap each future so it records its own elapsed time. Without
-        // this, `node_start` would be captured AFTER `join_all`
-        // completes and every `duration` would be a near-zero
-        // post-processing measurement.
-        let futures = layer_inputs.iter().map(|(_, i)| {
-            let i = i.clone();
-            let started = Instant::now();
-            let fut = execute_one(i);
-            async move {
-                let outcome = fut.await;
-                (outcome, started.elapsed())
-            }
-        });
-        let outcomes: Vec<(Result<O>, std::time::Duration)> = join_all(futures).await;
+        let futures = layer_inputs.iter().map(|(_, i)| execute_one(i.clone()));
+        let outcomes: Vec<Result<O>> = join_all(futures).await;
 
-        for ((name, _input), (outcome, duration)) in layer_inputs.into_iter().zip(outcomes) {
+        for ((name, _input), outcome) in layer_inputs.into_iter().zip(outcomes) {
             match outcome {
                 Ok(out) => {
                     let success = out.is_success();
@@ -612,7 +548,6 @@ where
                             name,
                             result: Some(cloned),
                             error: None,
-                            duration,
                             success: true,
                         });
                     } else {
@@ -621,7 +556,6 @@ where
                             name: name.clone(),
                             result: Some(cloned),
                             error: err_msg.clone(),
-                            duration,
                             success: false,
                         });
                         if input.fail_fast {
@@ -639,7 +573,6 @@ where
                         name: name.clone(),
                         result: None,
                         error: Some(msg.clone()),
-                        duration,
                         success: false,
                     });
                     if input.fail_fast {
@@ -658,7 +591,6 @@ where
         node_results,
         total_success,
         total_failed,
-        total_duration: start.elapsed(),
     })
 }
 
