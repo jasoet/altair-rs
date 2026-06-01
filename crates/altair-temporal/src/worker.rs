@@ -1,5 +1,12 @@
 //! Worker builder + lifecycle.
 
+// `tracing::instrument` attaches a `Drop`-guarded span to the function
+// body; under Rust 2024's tail-expr-drop-order rule this changes the
+// drop order of locals borrowed by the tail expression. The worker
+// futures we hand out don't carry side effects in `Drop` beyond the
+// SDK's own cleanup, so the change is observationally neutral here.
+#![allow(tail_expr_drop_order, clippy::single_match_else)]
+
 use std::sync::Arc;
 
 use temporalio_sdk_core::{CoreRuntime, FixedSizeSlotSupplier, RuntimeOptions, TunerBuilder};
@@ -149,9 +156,12 @@ impl WorkerBuilder {
         let sdk_worker = temporalio_sdk::Worker::new(&runtime, client, worker_opts)
             .map_err(|e| Error::worker(format!("worker init: {e}")))?;
 
+        let drain_deadline = self.config.shutdown_grace + std::time::Duration::from_secs(30);
+
         Ok(Worker {
             inner: sdk_worker,
             _runtime: runtime,
+            drain_deadline,
         })
     }
 }
@@ -161,6 +171,11 @@ pub struct Worker {
     inner: temporalio_sdk::Worker,
     /// Keeps the `CoreRuntime` alive for the worker's lifetime.
     _runtime: CoreRuntime,
+    /// Outer cap on how long the drain may take after shutdown is
+    /// initiated — set to `shutdown_grace + 30s` so we don't hang
+    /// indefinitely if the SDK's run loop doesn't acknowledge
+    /// `initiate_shutdown` for any reason.
+    drain_deadline: std::time::Duration,
 }
 
 impl Worker {
@@ -185,6 +200,11 @@ impl Worker {
     /// configure it from [`Config::shutdown_grace`] in
     /// [`WorkerBuilder::build`].
     ///
+    /// As a safety net, the drain is capped at
+    /// `shutdown_grace + 30s`. If the SDK's run loop doesn't return
+    /// by then, the worker future is dropped and a warning is logged.
+    /// In a healthy worker this safety net never fires.
+    ///
     /// Earlier versions of this method used `tokio::select!` to drop
     /// the worker future when shutdown fired — that cancelled
     /// in-flight activities mid-poll, leaving Temporal to mark them
@@ -200,6 +220,7 @@ impl Worker {
         F: std::future::Future<Output = ()> + Send + 'static,
     {
         let shutdown_handle = self.inner.shutdown_handle();
+        let drain_deadline = self.drain_deadline;
         let mut run_fut = Box::pin(self.inner.run());
         tokio::select! {
             biased;
@@ -210,11 +231,24 @@ impl Worker {
             }
         }
         // Continue polling the SAME worker future so the SDK's drain
-        // window applies. Re-polling `inner.run()` would not work —
-        // shutdown is one-shot on the worker.
-        let res = run_fut.await;
-        tracing::info!("worker drained");
-        res.map_err(|e| Error::worker(format!("{e:#}")))
+        // window applies. Bound the wait with `drain_deadline` so we
+        // don't hang if the SDK's run loop fails to acknowledge the
+        // shutdown for any reason — the drop here is the SAME shape
+        // the previous (drain-less) implementation had, so a stuck
+        // worker is no worse than before.
+        match tokio::time::timeout(drain_deadline, &mut run_fut).await {
+            Ok(res) => {
+                tracing::info!("worker drained");
+                res.map_err(|e| Error::worker(format!("{e:#}")))
+            }
+            Err(_) => {
+                tracing::warn!(
+                    drain_deadline_secs = drain_deadline.as_secs(),
+                    "drain deadline exceeded; dropping worker future",
+                );
+                Ok(())
+            }
+        }
     }
 }
 
