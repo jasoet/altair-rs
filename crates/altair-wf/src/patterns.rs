@@ -60,6 +60,7 @@ where
 /// }).await?;
 /// # Ok(()) }
 /// ```
+#[tracing::instrument(skip_all, fields(pattern = "execute"))]
 pub async fn execute<F, Fut, I, O>(input: I, mut execute_one: F) -> Result<O>
 where
     I: TaskInput,
@@ -107,6 +108,7 @@ where
 /// }).await?;
 /// # Ok(()) }
 /// ```
+#[tracing::instrument(skip_all, fields(pattern = "pipeline", tasks = input.tasks.len()))]
 pub async fn pipeline<F, Fut, I, O>(
     input: PipelineInput<I>,
     mut execute_one: F,
@@ -203,6 +205,7 @@ where
 /// }).await?;
 /// # Ok(()) }
 /// ```
+#[tracing::instrument(skip_all, fields(pattern = "parallel", tasks = input.tasks.len()))]
 pub async fn parallel<F, Fut, I, O>(
     input: ParallelInput<I>,
     execute_one: F,
@@ -319,6 +322,7 @@ where
 /// }).await?;
 /// # Ok(()) }
 /// ```
+#[tracing::instrument(skip_all, fields(pattern = "run_loop", items = input.items.len()))]
 pub async fn run_loop<F, Fut, I, O>(
     input: LoopInput<I>,
     substitutor: Substitutor<I>,
@@ -402,6 +406,7 @@ where
 /// }).await?;
 /// # Ok(()) }
 /// ```
+#[tracing::instrument(skip_all, fields(pattern = "parameterized_loop", param_keys = input.parameters.len()))]
 pub async fn parameterized_loop<F, Fut, I, O>(
     input: ParameterizedLoopInput<I>,
     substitutor: Substitutor<I>,
@@ -554,6 +559,7 @@ where
 /// let _out: DAGOutput<StepOut> = run_dag(input, |s| async move { Ok(StepOut) }).await?;
 /// # Ok(()) }
 /// ```
+#[tracing::instrument(skip_all, fields(pattern = "run_dag", nodes = input.nodes.len()))]
 pub async fn run_dag<F, Fut, I, O>(input: DAGInput<I>, execute_one: F) -> Result<DAGOutput<O>>
 where
     I: TaskInput + Clone,

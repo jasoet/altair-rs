@@ -36,7 +36,10 @@ pub enum FailureStrategy {
 
 /// The default activity options used by every pattern when the caller
 /// does not supply their own: 10-minute start-to-close timeout, 3
-/// retries with 1s → 60s exponential backoff (factor 2.0).
+/// retries with 1s → 60s exponential backoff (factor 2.0). No
+/// heartbeat is configured — long-running handlers should call
+/// [`activity_options_with`] with a non-zero heartbeat to avoid
+/// being killed by start-to-close.
 #[must_use]
 pub fn default_activity_options() -> ActivityOptions {
     let retry = default_retry_policy().into_inner();
@@ -45,6 +48,37 @@ pub fn default_activity_options() -> ActivityOptions {
     ))
     .retry_policy(retry)
     .build()
+}
+
+/// Build an [`ActivityOptions`] tuned for a specific activity. One-call
+/// alternative to writing the SDK's builder chain — wires
+/// start-to-close, heartbeat timeout (set `Duration::ZERO` to disable),
+/// and a custom retry policy.
+///
+/// # Example
+///
+/// ```no_run
+/// # use std::time::Duration;
+/// # use altair_wf::{activity_options_with, default_retry_policy};
+/// let opts = activity_options_with(
+///     Duration::from_mins(20),    // start-to-close
+///     Duration::from_secs(30),    // heartbeat — handler must `record_heartbeat` more often
+///     default_retry_policy(),
+/// );
+/// ```
+#[must_use]
+pub fn activity_options_with(
+    start_to_close: Duration,
+    heartbeat: Duration,
+    retry: RetryPolicy,
+) -> ActivityOptions {
+    let b = ActivityOptions::with_start_to_close_timeout(start_to_close)
+        .retry_policy(retry.into_inner());
+    if heartbeat.is_zero() {
+        b.build()
+    } else {
+        b.heartbeat_timeout(heartbeat).build()
+    }
 }
 
 /// The default retry policy applied to activity options when none is
