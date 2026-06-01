@@ -64,6 +64,54 @@ serde = { workspace = true }
 temporalio-sdk = { workspace = true }
 temporalio-common = { workspace = true }
 temporalio-macros = { workspace = true }
+# `async-trait` is also needed by the datasync_runner example which
+# implements `Source` / `Sink` traits in the example body.
+async-trait = { workspace = true }
 
 [lints]
 workspace = true
+
+# ---------------------------------------------------------------------------
+# Examples — see `examples/README.md`. Default-feature examples run
+# `cargo run -p altair-wf --example <name>`; feature-gated ones need
+# `--features function` or `--features datasync`.
+# ---------------------------------------------------------------------------
+
+[[example]]
+name = "hello_execute"
+path = "examples/hello_execute.rs"
+
+[[example]]
+name = "hello_pipeline"
+path = "examples/hello_pipeline.rs"
+
+[[example]]
+name = "hello_parallel"
+path = "examples/hello_parallel.rs"
+
+[[example]]
+name = "hello_loop"
+path = "examples/hello_loop.rs"
+
+[[example]]
+name = "hello_parameterized_loop"
+path = "examples/hello_parameterized_loop.rs"
+
+[[example]]
+name = "hello_dag"
+path = "examples/hello_dag.rs"
+
+[[example]]
+name = "function_registry"
+path = "examples/function_registry.rs"
+required-features = ["function"]
+
+[[example]]
+name = "datasync_runner"
+path = "examples/datasync_runner.rs"
+required-features = ["datasync"]
+
+[[example]]
+name = "datasync_chunked"
+path = "examples/datasync_chunked.rs"
+required-features = ["datasync"]

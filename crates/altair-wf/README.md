@@ -34,6 +34,22 @@ Opt-in features:
 altair-wf = { version = "0.2", features = ["function", "datasync"] }
 ```
 
+## Runnable examples
+
+End-to-end examples for every feature surface live in
+[`examples/`](examples/) — see [`examples/README.md`](examples/README.md)
+for the table and run instructions. Highlights:
+
+- `cargo run -p altair-wf --example hello_pipeline` — pipeline against
+  a local Temporal dev server.
+- `cargo run -p altair-wf --features datasync --example datasync_runner`
+  — in-process `Source → Mapper → Sink`, no Temporal needed.
+- `cargo run -p altair-wf --features datasync --example datasync_chunked`
+  — partitioned + cursor + continue-as-new (the load-bearing path).
+
+Most examples need `temporal server start-dev` running on
+`localhost:7233`.
+
 ## Patterns
 
 ### Single task
