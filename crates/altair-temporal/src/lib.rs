@@ -30,7 +30,10 @@ pub use client::Client;
 pub use config::{Config, TlsConfig};
 pub use error::{BoxError, Error, Result};
 pub use retry::{RetryPolicy, RetryPolicyBuilder};
-pub use schedule::{Schedule, ScheduleBuilder, delete as delete_schedule};
+pub use schedule::{
+    Schedule, ScheduleBuilder, delete as delete_schedule,
+    delete_if_exists as delete_schedule_if_exists,
+};
 pub use worker::{Worker, WorkerBuilder};
 
 // Underlying-lib re-exports

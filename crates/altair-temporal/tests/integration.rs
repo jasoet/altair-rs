@@ -279,6 +279,7 @@ impl FlakyWorkflow {
             .backoff_coefficient(2.0)
             .max_attempts(5)
             .build()
+            .expect("retry policy")
             .into_inner();
         let opts = ActivityOptions::with_start_to_close_timeout(Duration::from_secs(5))
             .retry_policy(retry_policy)

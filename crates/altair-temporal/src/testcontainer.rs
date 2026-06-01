@@ -37,11 +37,14 @@ use testcontainers::{
 
 use crate::config::Config;
 
-/// Image tag used by [`TemporalContainer::start`]. Pinned to a known-good
-/// release for reproducibility; override with [`TemporalContainer::builder`]
-/// to upgrade. Refers to the Temporal CLI image, which bundles the dev
+/// Image tag used by [`TemporalContainer::start`].
+///
+/// Pinned to a specific Temporal CLI release for reproducibility — a
+/// floating `"latest"` is a CI-breakage time bomb on every upstream
+/// release. Override with [`TemporalContainer::builder`] to upgrade.
+/// Refers to the `temporalio/temporal` image, which bundles the dev
 /// server with embedded `SQLite`.
-pub const DEFAULT_IMAGE_TAG: &str = "latest";
+pub const DEFAULT_IMAGE_TAG: &str = "1.7.0";
 
 /// Default Temporal namespace created by `server start-dev`.
 pub const DEFAULT_NAMESPACE: &str = "default";

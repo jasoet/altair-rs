@@ -49,6 +49,16 @@ pub fn default_activity_options() -> ActivityOptions {
 
 /// The default retry policy applied to activity options when none is
 /// supplied: 3 attempts, 1s initial, 60s max, factor 2.0.
+///
+/// `expect` is safe here because the inputs are compile-time constants
+/// that all satisfy the policy's validation rules — see
+/// `RetryPolicyBuilder::build` for the contract.
+///
+/// # Panics
+///
+/// Never panics in practice — the `.expect(...)` only fires if a
+/// future contributor changes the compile-time constants above to
+/// values that violate `RetryPolicyBuilder::build`'s invariants.
 #[must_use]
 pub fn default_retry_policy() -> RetryPolicy {
     RetryPolicy::builder()
@@ -57,6 +67,7 @@ pub fn default_retry_policy() -> RetryPolicy {
         .backoff_coefficient(DEFAULT_BACKOFF_COEFFICIENT)
         .max_attempts(DEFAULT_MAX_RETRY_ATTEMPTS)
         .build()
+        .expect("default retry policy constants are valid")
 }
 
 /// Wrap a closure in the `Arc<dyn Fn ...>` shape the loop patterns

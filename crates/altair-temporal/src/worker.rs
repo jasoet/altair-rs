@@ -1,6 +1,8 @@
 //! Worker builder + lifecycle.
 
-use temporalio_sdk_core::{CoreRuntime, RuntimeOptions};
+use std::sync::Arc;
+
+use temporalio_sdk_core::{CoreRuntime, FixedSizeSlotSupplier, RuntimeOptions, TunerBuilder};
 
 use crate::client::Client;
 use crate::config::Config;
@@ -36,24 +38,36 @@ impl WorkerBuilder {
         }
     }
 
-    /// Override identity (defaults to the value in `Config`).
+    /// Override identity. Use when you need a deterministic worker
+    /// name for tests; production should leave this unset so each
+    /// replica reports the SDK's `<pid>@<hostname>` default.
     #[must_use]
     pub fn identity(mut self, id: impl Into<String>) -> Self {
-        self.config.identity = id.into();
+        self.config.identity = Some(id.into());
         self
     }
 
-    /// Override max concurrent activities.
+    /// Override max **concurrent** activities (slot capacity, not a
+    /// rate limit).
     #[must_use]
     pub fn max_concurrent_activities(mut self, n: u32) -> Self {
         self.config.max_concurrent_activities = n;
         self
     }
 
-    /// Override max concurrent workflows (cached workflow slots).
+    /// Override max **concurrent** workflow tasks (slot capacity, not
+    /// the sticky-cache size — see
+    /// [`max_cached_workflows`](Self::max_cached_workflows)).
     #[must_use]
     pub fn max_concurrent_workflows(mut self, n: u32) -> Self {
         self.config.max_concurrent_workflows = n;
+        self
+    }
+
+    /// Override the sticky-cache LRU size.
+    #[must_use]
+    pub fn max_cached_workflows(mut self, n: usize) -> Self {
+        self.config.max_cached_workflows = n;
         self
     }
 
@@ -90,20 +104,42 @@ impl WorkerBuilder {
     ///
     /// Propagates [`Error::Connect`], [`Error::Configuration`], and
     /// [`Error::Worker`] from the underlying SDK.
+    #[tracing::instrument(
+        skip(self),
+        fields(
+            host = %self.config.host,
+            namespace = %self.config.namespace,
+            task_queue = %self.config.task_queue,
+        ),
+    )]
     pub async fn build(self) -> Result<Worker> {
         let client = Client::from_config(&self.config).await?;
 
         let runtime = CoreRuntime::new_assume_tokio(RuntimeOptions::default())
             .map_err(|e| Error::worker(format!("runtime init: {e:#}")))?;
 
-        let max_cached =
+        // Build a Tuner with FixedSizeSlotSupplier for both workflow
+        // and activity slots — these are the actual concurrency caps.
+        // The SDK's per-second rate limit (`max_worker_activities_per_second`)
+        // is intentionally NOT used: setting it silently throttles
+        // workers to N exec/sec regardless of available parallelism.
+        let workflow_slots =
             usize::try_from(self.config.max_concurrent_workflows).unwrap_or(usize::MAX);
-        let max_activities_per_sec = f64::from(self.config.max_concurrent_activities);
+        let activity_slots =
+            usize::try_from(self.config.max_concurrent_activities).unwrap_or(usize::MAX);
+        let mut tuner_builder = TunerBuilder::default();
+        tuner_builder.workflow_slot_supplier(Arc::new(FixedSizeSlotSupplier::new(workflow_slots)));
+        tuner_builder.activity_slot_supplier(Arc::new(FixedSizeSlotSupplier::new(activity_slots)));
+        let tuner = Arc::new(tuner_builder.build());
 
+        // Only set identity when the operator opted in — otherwise the
+        // SDK picks `<pid>@<hostname>`, which is what we want in prod
+        // so each replica is distinguishable in the Temporal UI.
         let mut worker_opts = temporalio_sdk::WorkerOptions::new(self.config.task_queue.clone())
-            .max_cached_workflows(max_cached)
-            .maybe_max_worker_activities_per_second(Some(max_activities_per_sec))
-            .maybe_client_identity_override(Some(self.config.identity.clone()))
+            .max_cached_workflows(self.config.max_cached_workflows)
+            .tuner(tuner)
+            .maybe_graceful_shutdown_period(Some(self.config.shutdown_grace))
+            .maybe_client_identity_override(self.config.identity.clone())
             .build();
 
         for reg in self.registrations {
@@ -128,7 +164,8 @@ pub struct Worker {
 }
 
 impl Worker {
-    /// Run until SIGINT (`Ctrl-C`) or SIGTERM.
+    /// Run until SIGINT (`Ctrl-C`) or SIGTERM, then drain in-flight
+    /// activities for up to [`Config::shutdown_grace`].
     ///
     /// # Errors
     ///
@@ -137,22 +174,47 @@ impl Worker {
         Box::pin(self.run_with_shutdown(shutdown_signal())).await
     }
 
-    /// Run until the given future resolves.
+    /// Run until `shutdown` resolves, then **gracefully drain**
+    /// in-flight activities for up to [`Config::shutdown_grace`]
+    /// before returning.
     ///
-    /// `tokio::select!` cancels the losing branch; the SDK's
-    /// `graceful_shutdown_period` setting handles in-flight activity cleanup.
+    /// Implementation: when the shutdown future fires, the worker's
+    /// SDK-side `initiate_shutdown` token is set and the same worker
+    /// future is then polled to completion. The SDK's
+    /// `graceful_shutdown_period` controls the drain window — we
+    /// configure it from [`Config::shutdown_grace`] in
+    /// [`WorkerBuilder::build`].
+    ///
+    /// Earlier versions of this method used `tokio::select!` to drop
+    /// the worker future when shutdown fired — that cancelled
+    /// in-flight activities mid-poll, leaving Temporal to mark them
+    /// as start-to-close timeouts on the next retry. The drain pattern
+    /// here avoids that.
     ///
     /// # Errors
     ///
     /// Returns [`Error::Worker`] if the SDK worker exits with an error.
+    #[tracing::instrument(skip(self, shutdown))]
     pub async fn run_with_shutdown<F>(mut self, shutdown: F) -> Result<()>
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
+        let shutdown_handle = self.inner.shutdown_handle();
+        let mut run_fut = Box::pin(self.inner.run());
         tokio::select! {
-            res = self.inner.run() => res.map_err(|e| Error::worker(format!("{e:#}"))),
-            () = shutdown => Ok(()),
+            biased;
+            res = &mut run_fut => return res.map_err(|e| Error::worker(format!("{e:#}"))),
+            () = shutdown => {
+                tracing::info!("shutdown requested; initiating graceful drain");
+                shutdown_handle();
+            }
         }
+        // Continue polling the SAME worker future so the SDK's drain
+        // window applies. Re-polling `inner.run()` would not work —
+        // shutdown is one-shot on the worker.
+        let res = run_fut.await;
+        tracing::info!("worker drained");
+        res.map_err(|e| Error::worker(format!("{e:#}")))
     }
 }
 

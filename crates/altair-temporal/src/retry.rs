@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use crate::error::{Error, Result};
+
 /// A Temporal `RetryPolicy` ready to plug into `ActivityOptions`.
 ///
 /// Constructed via [`RetryPolicy::builder`]; converted to the SDK type
@@ -86,42 +88,55 @@ impl RetryPolicyBuilder {
 
     /// Finalise into a [`RetryPolicy`].
     ///
-    /// # Panics
+    /// Returns [`Error::Configuration`] when any of these invariants
+    /// are violated, since they'd produce a policy the Temporal server
+    /// rejects at runtime:
     ///
-    /// Panics if any of these invariants are violated, since they would
-    /// produce a policy the Temporal server will reject at runtime:
     /// - `backoff_coefficient` must be finite and `> 0.0`
     /// - `initial_interval` and `maximum_interval` must be non-zero
     /// - `initial_interval <= maximum_interval`
-    #[must_use]
-    pub fn build(self) -> RetryPolicy {
+    ///
+    /// Earlier versions of this method panicked instead. That was a
+    /// production hazard: the Temporal SDK macros expand to code that
+    /// calls `.build()` inside the workflow body, so a panic there
+    /// crashed the workflow task and the server would retry it
+    /// indefinitely. `Result` lets the caller bubble validation
+    /// failures up to startup instead.
+    ///
+    /// # Errors
+    ///
+    /// See above.
+    pub fn build(self) -> Result<RetryPolicy> {
         use temporalio_common::protos::temporal::api::common::v1::RetryPolicy as Proto;
-        assert!(
-            self.backoff_coefficient.is_finite() && self.backoff_coefficient > 0.0,
-            "backoff_coefficient must be finite and > 0.0, got {}",
-            self.backoff_coefficient,
-        );
-        assert!(
-            !self.initial_interval.is_zero(),
-            "initial_interval must be > 0",
-        );
-        assert!(
-            !self.maximum_interval.is_zero(),
-            "maximum_interval must be > 0",
-        );
-        assert!(
-            self.initial_interval <= self.maximum_interval,
-            "initial_interval ({:?}) must be <= maximum_interval ({:?})",
-            self.initial_interval,
-            self.maximum_interval,
-        );
-        RetryPolicy(Proto {
+        if !(self.backoff_coefficient.is_finite() && self.backoff_coefficient > 0.0) {
+            return Err(Error::Configuration(format!(
+                "backoff_coefficient must be finite and > 0.0, got {}",
+                self.backoff_coefficient,
+            )));
+        }
+        if self.initial_interval.is_zero() {
+            return Err(Error::Configuration(
+                "initial_interval must be > 0".to_string(),
+            ));
+        }
+        if self.maximum_interval.is_zero() {
+            return Err(Error::Configuration(
+                "maximum_interval must be > 0".to_string(),
+            ));
+        }
+        if self.initial_interval > self.maximum_interval {
+            return Err(Error::Configuration(format!(
+                "initial_interval ({:?}) must be <= maximum_interval ({:?})",
+                self.initial_interval, self.maximum_interval,
+            )));
+        }
+        Ok(RetryPolicy(Proto {
             initial_interval: Some(duration_to_proto(self.initial_interval)),
             backoff_coefficient: self.backoff_coefficient,
             maximum_interval: Some(duration_to_proto(self.maximum_interval)),
             maximum_attempts: i32::try_from(self.max_attempts).unwrap_or(i32::MAX),
             non_retryable_error_types: self.non_retryable_error_types,
-        })
+        }))
     }
 }
 
@@ -139,7 +154,7 @@ mod tests {
 
     #[test]
     fn defaults_populate_expected_proto_fields() {
-        let p = RetryPolicy::builder().build().into_inner();
+        let p = RetryPolicy::builder().build().unwrap().into_inner();
         assert_eq!(p.backoff_coefficient, 2.0);
         assert_eq!(p.maximum_attempts, 0);
         let initial = p.initial_interval.expect("initial");
@@ -150,32 +165,37 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "backoff_coefficient must be finite")]
-    fn build_panics_on_nan_coefficient() {
-        let _ = RetryPolicy::builder().backoff_coefficient(f64::NAN).build();
+    fn build_rejects_nan_coefficient() {
+        let res = RetryPolicy::builder().backoff_coefficient(f64::NAN).build();
+        assert!(matches!(res, Err(Error::Configuration(_))));
     }
 
     #[test]
-    #[should_panic(expected = "backoff_coefficient must be finite")]
-    fn build_panics_on_zero_coefficient() {
-        let _ = RetryPolicy::builder().backoff_coefficient(0.0).build();
+    fn build_rejects_zero_coefficient() {
+        let res = RetryPolicy::builder().backoff_coefficient(0.0).build();
+        assert!(matches!(res, Err(Error::Configuration(_))));
     }
 
     #[test]
-    #[should_panic(expected = "initial_interval must be > 0")]
-    fn build_panics_on_zero_initial() {
-        let _ = RetryPolicy::builder()
+    fn build_rejects_zero_initial() {
+        let res = RetryPolicy::builder()
             .initial_interval(Duration::ZERO)
             .build();
+        assert!(matches!(res, Err(Error::Configuration(_))));
     }
 
     #[test]
-    #[should_panic(expected = "must be <= maximum_interval")]
-    fn build_panics_on_inverted_intervals() {
-        let _ = RetryPolicy::builder()
+    fn build_rejects_inverted_intervals() {
+        let res = RetryPolicy::builder()
             .initial_interval(Duration::from_secs(60))
             .maximum_interval(Duration::from_secs(1))
             .build();
+        let err = res.unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("must be <="),
+            "expected inversion message, got {msg}",
+        );
     }
 
     #[test]
@@ -188,6 +208,7 @@ mod tests {
             .non_retryable("AuthError")
             .non_retryable("ValidationError")
             .build()
+            .unwrap()
             .into_inner();
         assert_eq!(p.backoff_coefficient, 1.5);
         assert_eq!(p.maximum_attempts, 7);
