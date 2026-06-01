@@ -173,11 +173,17 @@ async fn main() -> anyhow::Result<()> {
         "  total_success = {}, total_failed = {}",
         out.total_success, out.total_failed,
     );
-    for (i, step) in out.results.iter().enumerate() {
+    for step in &out.results {
         println!(
-            "  task[{i}] {} -> {} bytes (ok={})",
+            "  preserved: {} -> {} bytes (ok={})",
             step.url, step.bytes, step.ok,
         );
+    }
+    // Activity errors produce no `O` value, so the failing task is
+    // absent from `out.results` — but its input position + reason are
+    // recorded here so the caller can still address it.
+    for (idx, reason) in out.failed_indices.iter().zip(out.failure_reasons.iter()) {
+        println!("  failed:    input[{idx}] -> {reason}");
     }
     Ok(())
 }
