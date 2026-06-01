@@ -86,7 +86,7 @@ pub mod prelude;
 pub use dag::{DAGInput, DAGNode, DAGOutput, NodeResult};
 pub use error::{Error, Result};
 pub use helpers::{
-    FailureStrategy, default_activity_options, default_retry_policy,
+    FailureStrategy, activity_options_with, default_activity_options, default_retry_policy,
     generate_parameter_combinations, substitute_template, substitutor_from_fn,
 };
 pub use patterns::{execute, parallel, parameterized_loop, pipeline, run_dag, run_loop};

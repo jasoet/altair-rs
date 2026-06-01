@@ -165,7 +165,7 @@ pub enum Cursor<ReadFn, AdvFn> {
 /// past those completed partitions via cursor filtering — so the
 /// tracker is the durable boundary, and `advance` implementations
 /// must be idempotent (see [`Cursor`] for the type-level note).
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub async fn chunked_sync_run<
     K,
     ListFut,
@@ -209,19 +209,31 @@ where
         ..ChunkedSyncSummary::default()
     };
 
-    let mut parts = list_partitions().await?;
+    let mut parts = list_partitions().await.map_err(|e| {
+        tracing::error!(error = %e, "chunked_sync_run: list_partitions failed");
+        e
+    })?;
     if parts.is_empty() {
+        tracing::info!(job = %summary.job_name, "chunked_sync_run: no partitions to process");
         return Ok(summary);
     }
 
     // Cursor filter.
     let mut advance = match cursor {
         Cursor::Some { read, advance } => {
-            let cur = read().await?;
+            let cur = read().await.map_err(|e| {
+                tracing::error!(error = %e, "chunked_sync_run: read_cursor failed");
+                e
+            })?;
             if let Some(c) = cur {
+                tracing::debug!("chunked_sync_run: filtering partitions by cursor");
                 parts.retain(|p| p.start >= c);
             }
             if parts.is_empty() {
+                tracing::info!(
+                    job = %summary.job_name,
+                    "chunked_sync_run: cursor filter left no partitions",
+                );
                 return Ok(summary);
             }
             Some(advance)
@@ -230,16 +242,37 @@ where
     };
 
     // Truncate.
+    let total_parts = parts.len();
     let deferred = config.max_partitions_per_execution > 0
         && parts.len() > config.max_partitions_per_execution;
     if deferred {
         parts.truncate(config.max_partitions_per_execution);
     }
+    tracing::info!(
+        job = %summary.job_name,
+        total = total_parts,
+        processing = parts.len(),
+        deferred,
+        "chunked_sync_run: starting partition loop",
+    );
 
     let n = parts.len();
     for (i, p) in parts.into_iter().enumerate() {
         let end_for_advance = p.end.clone();
-        let pr = run_partition(p).await?;
+        let pr = match run_partition(p).await {
+            Ok(pr) => pr,
+            Err(e) => {
+                tracing::error!(
+                    job = %summary.job_name,
+                    failed_at = i,
+                    completed_partitions = summary.total_partitions,
+                    error = %e,
+                    "chunked_sync_run: run_partition failed; partitions before this are advanced \
+                     in the tracker and a retry will resume from the next partition",
+                );
+                return Err(e);
+            }
+        };
         summary.total_partitions += 1;
         summary.total_fetched += pr.fetched;
         summary.total_inserted += pr.inserted;
@@ -248,7 +281,17 @@ where
         summary.partitions.push(pr);
 
         if let Some(adv) = advance.as_mut() {
-            adv(end_for_advance).await?;
+            adv(end_for_advance).await.map_err(|e| {
+                tracing::error!(
+                    job = %summary.job_name,
+                    failed_at = i,
+                    completed_partitions = summary.total_partitions,
+                    error = %e,
+                    "chunked_sync_run: advance_cursor failed after partition success; \
+                     on retry, this partition will be re-processed (cursor was not advanced)",
+                );
+                e
+            })?;
         }
 
         if i < n - 1 && !config.partition_sleep.is_zero() {
@@ -257,6 +300,15 @@ where
     }
 
     summary.deferred = deferred;
+    tracing::info!(
+        job = %summary.job_name,
+        processed = summary.total_partitions,
+        inserted = summary.total_inserted,
+        updated = summary.total_updated,
+        skipped = summary.total_skipped,
+        deferred,
+        "chunked_sync_run: completed",
+    );
     Ok(summary)
 }
 

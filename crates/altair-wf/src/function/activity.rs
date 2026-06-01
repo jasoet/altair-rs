@@ -51,6 +51,7 @@ impl FunctionActivities {
         _ctx: ActivityContext,
         input: FunctionExecutionInput,
     ) -> std::result::Result<FunctionExecutionOutput, ActivityError> {
+        tracing::info!(handler = %input.name, "function.execute: dispatching");
         let started = std::time::Instant::now();
         let started_at_millis = unix_millis();
 

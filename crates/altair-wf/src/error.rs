@@ -26,18 +26,20 @@ pub enum Error {
     /// The underlying activity invocation failed at the SDK boundary
     /// (network error, activity panic, timeout, retry exhaustion).
     ///
-    /// The `source` field may carry an `ActivityExecutionError` from
-    /// the Temporal SDK that contains application-error details (and,
-    /// depending on the activity, payload fragments). Sanitise before
-    /// emitting to external observability sinks if that's a concern.
-    /// Prefer the [`Self::activity`] constructor over the struct
-    /// literal — it handles the `Box::new(...)` for you.
+    /// The `source` field carries the original `Send + Sync + 'static`
+    /// error — production observability code can `downcast_ref` to
+    /// recover the concrete `ActivityError` for retry classification,
+    /// payload inspection, or structured logging. Sanitise before
+    /// emitting to external observability sinks if payload privacy is
+    /// a concern. Prefer the [`Self::activity`] constructor over the
+    /// struct literal — it handles the `Box::new(...)` for you.
     #[error("activity '{activity}' failed: {source}")]
     Activity {
         /// The activity name as it appears in Temporal.
         activity: String,
-        /// Underlying SDK error.
-        source: Box<dyn std::error::Error + Send + Sync>,
+        /// Underlying SDK error. `'static` bound so callers can
+        /// downcast via `source.downcast_ref::<ActivityError>()`.
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
 }
 
@@ -91,5 +93,25 @@ mod tests {
         let s = e.to_string();
         assert!(s.contains("step 3"));
         assert!(s.contains("task reported failure"));
+    }
+
+    #[test]
+    fn activity_source_can_be_downcast_to_concrete_type() {
+        // Regression: `Error::Activity::source` must carry the
+        // `'static` bound so production observability code can
+        // recover the original error type via `downcast_ref`. Without
+        // it, operators inspecting an incident get only `.to_string()`.
+        let io = std::io::Error::other("network blip");
+        let err = Error::activity("MyActs::ping", io);
+        match err {
+            Error::Activity { source, .. } => {
+                let recovered = source
+                    .downcast_ref::<std::io::Error>()
+                    .expect("downcast to io::Error");
+                assert_eq!(recovered.kind(), std::io::ErrorKind::Other);
+                assert!(recovered.to_string().contains("network blip"));
+            }
+            other => panic!("expected Error::Activity, got {other:?}"),
+        }
     }
 }

@@ -313,14 +313,25 @@ pub struct FunctionExecutionOutput {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub data: Vec<u8>,
     /// Wall-clock duration of the handler call (in millis on the wire).
+    ///
+    /// **Observational only.** Branching on this field from inside a
+    /// workflow body breaks Temporal replay determinism — the activity
+    /// is non-deterministic, so the measured duration depends on
+    /// machine + load and changes between executions. Read it for
+    /// metrics emitted at the activity boundary or for non-workflow
+    /// observability; do not let it influence workflow control flow.
     #[serde(with = "duration_millis_compat")]
     pub duration: Duration,
     /// Unix-millis when the handler started. Zero on the default
     /// instance.
+    ///
+    /// Observational only — see [`duration`](Self::duration).
     #[serde(default)]
     pub started_at_millis: u64,
     /// Unix-millis when the handler finished. Zero on the default
     /// instance.
+    ///
+    /// Observational only — see [`duration`](Self::duration).
     #[serde(default)]
     pub finished_at_millis: u64,
 }
