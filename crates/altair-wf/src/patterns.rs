@@ -121,6 +121,8 @@ where
     let mut results: Vec<O> = Vec::with_capacity(input.tasks.len());
     let mut total_success = 0usize;
     let mut total_failed = 0usize;
+    let mut failed_indices: Vec<usize> = Vec::new();
+    let mut failure_reasons: Vec<String> = Vec::new();
 
     for (i, task) in input.tasks.into_iter().enumerate() {
         match dispatch(&mut execute_one, task).await {
@@ -129,8 +131,10 @@ where
                     total_success += 1;
                 } else {
                     total_failed += 1;
+                    let reason = out.error().unwrap_or("task reported failure").to_string();
+                    failed_indices.push(i);
+                    failure_reasons.push(reason.clone());
                     if input.stop_on_error {
-                        let reason = out.error().unwrap_or("task reported failure").to_string();
                         results.push(out);
                         return Err(Error::PatternStopped {
                             position: i.to_string(),
@@ -142,13 +146,18 @@ where
             }
             Err(e) => {
                 total_failed += 1;
+                let reason = e.to_string();
+                failed_indices.push(i);
+                failure_reasons.push(reason.clone());
                 if input.stop_on_error {
                     return Err(Error::PatternStopped {
                         position: i.to_string(),
-                        reason: e.to_string(),
+                        reason,
                     });
                 }
-                // Non-stop: drop the output (we have no value to push) and continue.
+                // Non-stop: we have no `O` value to push, but the
+                // position + reason are recorded above so the caller
+                // can still address this failure.
             }
         }
     }
@@ -157,6 +166,8 @@ where
         results,
         total_success,
         total_failed,
+        failed_indices,
+        failure_reasons,
     })
 }
 
@@ -213,6 +224,8 @@ where
     let mut results: Vec<O> = Vec::with_capacity(raw_results.len());
     let mut total_success = 0usize;
     let mut total_failed = 0usize;
+    let mut failed_indices: Vec<usize> = Vec::new();
+    let mut failure_reasons: Vec<String> = Vec::new();
     for (i, item) in raw_results.into_iter().enumerate() {
         match item {
             Ok(out) => {
@@ -220,8 +233,10 @@ where
                     total_success += 1;
                 } else {
                     total_failed += 1;
+                    let reason = out.error().unwrap_or("task reported failure").to_string();
+                    failed_indices.push(i);
+                    failure_reasons.push(reason.clone());
                     if input.failure_strategy == FailureStrategy::FailFast {
-                        let reason = out.error().unwrap_or("task reported failure").to_string();
                         results.push(out);
                         return Err(Error::PatternStopped {
                             position: i.to_string(),
@@ -233,10 +248,13 @@ where
             }
             Err(e) => {
                 total_failed += 1;
+                let reason = e.to_string();
+                failed_indices.push(i);
+                failure_reasons.push(reason.clone());
                 if input.failure_strategy == FailureStrategy::FailFast {
                     return Err(Error::PatternStopped {
                         position: i.to_string(),
-                        reason: e.to_string(),
+                        reason,
                     });
                 }
             }
@@ -247,6 +265,8 @@ where
         results,
         total_success,
         total_failed,
+        failed_indices,
+        failure_reasons,
     })
 }
 
@@ -323,14 +343,15 @@ where
         .map(|(i, item)| substitutor(&template, item.as_str(), i, &no_params))
         .collect();
 
-    let outcomes = run_iterations(inputs, input.parallel, strategy, execute_one).await?;
-    let (results, total_success, total_failed) = outcomes;
+    let agg = run_iterations(inputs, input.parallel, strategy, execute_one).await?;
 
     Ok(LoopOutput {
-        results,
-        total_success,
-        total_failed,
+        results: agg.results,
+        total_success: agg.total_success,
+        total_failed: agg.total_failed,
         item_count,
+        failed_indices: agg.failed_indices,
+        failure_reasons: agg.failure_reasons,
     })
 }
 
@@ -404,15 +425,24 @@ where
         .map(|(i, params)| substitutor(&template, "", i, &params))
         .collect();
 
-    let outcomes = run_iterations(inputs, input.parallel, strategy, execute_one).await?;
-    let (results, total_success, total_failed) = outcomes;
+    let agg = run_iterations(inputs, input.parallel, strategy, execute_one).await?;
 
     Ok(LoopOutput {
-        results,
-        total_success,
-        total_failed,
+        results: agg.results,
+        total_success: agg.total_success,
+        total_failed: agg.total_failed,
         item_count,
+        failed_indices: agg.failed_indices,
+        failure_reasons: agg.failure_reasons,
     })
+}
+
+struct LoopAggregate<O> {
+    results: Vec<O>,
+    total_success: usize,
+    total_failed: usize,
+    failed_indices: Vec<usize>,
+    failure_reasons: Vec<String>,
 }
 
 async fn run_iterations<F, Fut, I, O>(
@@ -420,7 +450,7 @@ async fn run_iterations<F, Fut, I, O>(
     parallel_run: bool,
     failure_strategy: FailureStrategy,
     execute_one: F,
-) -> Result<(Vec<O>, usize, usize)>
+) -> Result<LoopAggregate<O>>
 where
     I: TaskInput,
     O: TaskOutput,
@@ -430,6 +460,8 @@ where
     let mut results: Vec<O> = Vec::with_capacity(inputs.len());
     let mut total_success = 0usize;
     let mut total_failed = 0usize;
+    let mut failed_indices: Vec<usize> = Vec::new();
+    let mut failure_reasons: Vec<String> = Vec::new();
 
     let outcomes: Vec<Result<O>> = if parallel_run {
         let futures = inputs.into_iter().map(&execute_one).collect::<Vec<_>>();
@@ -449,8 +481,10 @@ where
                     total_success += 1;
                 } else {
                     total_failed += 1;
+                    let reason = out.error().unwrap_or("task reported failure").to_string();
+                    failed_indices.push(i);
+                    failure_reasons.push(reason.clone());
                     if failure_strategy == FailureStrategy::FailFast {
-                        let reason = out.error().unwrap_or("task reported failure").to_string();
                         results.push(out);
                         return Err(Error::PatternStopped {
                             position: i.to_string(),
@@ -462,17 +496,26 @@ where
             }
             Err(e) => {
                 total_failed += 1;
+                let reason = e.to_string();
+                failed_indices.push(i);
+                failure_reasons.push(reason.clone());
                 if failure_strategy == FailureStrategy::FailFast {
                     return Err(Error::PatternStopped {
                         position: i.to_string(),
-                        reason: e.to_string(),
+                        reason,
                     });
                 }
             }
         }
     }
 
-    Ok((results, total_success, total_failed))
+    Ok(LoopAggregate {
+        results,
+        total_success,
+        total_failed,
+        failed_indices,
+        failure_reasons,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -669,6 +712,48 @@ mod tests {
         assert_eq!(out.results.len(), 3);
         assert_eq!(out.total_success, 2);
         assert_eq!(out.total_failed, 1);
+        // Business-logic failure at index 1 is tracked with reason.
+        assert_eq!(out.failed_indices, vec![1]);
+        assert_eq!(out.failure_reasons.len(), 1);
+        assert!(out.failure_reasons[0].contains("step 2 failed"));
+    }
+
+    async fn execute_with_activity_error(step: Step) -> Result<StepResult> {
+        if step.will_fail {
+            Err(Error::activity(
+                format!("step{}", step.id),
+                std::io::Error::other(format!("activity boom for step {}", step.id)),
+            ))
+        } else {
+            Ok(StepResult {
+                id: step.id,
+                ok: true,
+                message: String::new(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn pipeline_continue_records_activity_error_position_and_reason() {
+        // Regression: when the dispatch closure returns `Err` under
+        // `stop_on_error = false`, there's no `O` value to push to
+        // `results`. The pattern must still record the failing input
+        // position + the error reason so the caller can address it.
+        let input = PipelineInput {
+            tasks: vec![ok(1), fail(2), ok(3)],
+            stop_on_error: false,
+            cleanup: false,
+        };
+        let out: PipelineOutput<StepResult> =
+            pipeline(input, execute_with_activity_error).await.unwrap();
+        // results lost the failed entry (no O to push); count + indices
+        // still reflect the truth.
+        assert_eq!(out.results.len(), 2);
+        assert_eq!(out.total_success, 2);
+        assert_eq!(out.total_failed, 1);
+        assert_eq!(out.failed_indices, vec![1]);
+        assert_eq!(out.failure_reasons.len(), 1);
+        assert!(out.failure_reasons[0].contains("activity boom"));
     }
 
     #[tokio::test]
@@ -695,6 +780,28 @@ mod tests {
         assert_eq!(out.results.len(), 4);
         assert_eq!(out.total_success, 3);
         assert_eq!(out.total_failed, 1);
+        assert_eq!(out.failed_indices, vec![1]);
+        assert!(out.failure_reasons[0].contains("step 2 failed"));
+    }
+
+    #[tokio::test]
+    async fn parallel_continue_records_activity_error_position_and_reason() {
+        let input = ParallelInput {
+            tasks: vec![ok(1), fail(2), ok(3), fail(4)],
+            failure_strategy: FailureStrategy::Continue,
+        };
+        let out: ParallelOutput<StepResult> =
+            parallel(input, execute_with_activity_error).await.unwrap();
+        // Activity errors at indices 1 and 3 do not produce O values,
+        // so `results` is shorter than `tasks` — but both failures
+        // are addressable via `failed_indices`.
+        assert_eq!(out.results.len(), 2);
+        assert_eq!(out.total_success, 2);
+        assert_eq!(out.total_failed, 2);
+        assert_eq!(out.failed_indices, vec![1, 3]);
+        assert_eq!(out.failure_reasons.len(), 2);
+        assert!(out.failure_reasons[0].contains("activity boom for step 2"));
+        assert!(out.failure_reasons[1].contains("activity boom for step 4"));
     }
 
     #[tokio::test]
@@ -728,6 +835,32 @@ mod tests {
         assert_eq!(out.item_count, 3);
         assert_eq!(out.total_success, 3);
         assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn run_loop_continue_records_failed_iteration_index() {
+        // Iteration 1 (item "b") will fail via the dispatch closure;
+        // the LoopOutput must surface index 1 in `failed_indices`.
+        let input = LoopInput {
+            items: vec!["a".into(), "b".into(), "c".into()],
+            template: ok(0),
+            parallel: false,
+            failure_strategy: FailureStrategy::Continue,
+        };
+        let substitutor: Substitutor<Step> = Arc::new(|_template, item: &str, idx, _params| Step {
+            id: u32::try_from(idx).unwrap(),
+            // Trigger the activity-error path on the middle iteration.
+            will_fail: item == "b",
+        });
+        let out: LoopOutput<StepResult> = run_loop(input, substitutor, execute_with_activity_error)
+            .await
+            .unwrap();
+        assert_eq!(out.item_count, 3);
+        assert_eq!(out.total_success, 2);
+        assert_eq!(out.total_failed, 1);
+        assert_eq!(out.failed_indices, vec![1]);
+        assert_eq!(out.failure_reasons.len(), 1);
+        assert!(out.failure_reasons[0].contains("activity boom"));
     }
 
     #[tokio::test]

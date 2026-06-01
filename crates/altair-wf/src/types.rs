@@ -59,15 +59,40 @@ impl<I: TaskInput> PipelineInput<I> {
 /// Temporal's built-in workflow execution metrics, or measure inside
 /// the activities themselves (allowed; activities have non-deterministic
 /// contexts).
+///
+/// # Failure addressing
+///
+/// `results` is shorter than `tasks` when an activity error happens
+/// under `stop_on_error = false` (the error path has no `O` value to
+/// push). When that happens, indices in `results` no longer correspond
+/// to input positions. Use [`failed_indices`](Self::failed_indices) +
+/// [`failure_reasons`](Self::failure_reasons) to recover *which*
+/// input task failed and why.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineOutput<O> {
     /// Per-step results in execution order. May be shorter than
-    /// `tasks.len()` when `stop_on_error` is true.
+    /// `tasks.len()` when `stop_on_error` is true or when any task's
+    /// dispatch closure returned `Err` (activity error) under
+    /// `stop_on_error = false`.
     pub results: Vec<O>,
     /// Count of steps whose `is_success()` returned `true`.
     pub total_success: usize,
     /// Count of failing steps.
     pub total_failed: usize,
+    /// Input positions (0-based, into `PipelineInput::tasks`) that
+    /// failed — same length and order as [`failure_reasons`]. Covers
+    /// both business-logic failures (`is_success()` returned false)
+    /// and activity errors (the dispatch closure returned `Err`).
+    ///
+    /// [`failure_reasons`]: Self::failure_reasons
+    #[serde(default = "Vec::new")]
+    pub failed_indices: Vec<usize>,
+    /// One error message per `failed_indices` entry. For
+    /// business-logic failures this is `TaskOutput::error()`; for
+    /// activity errors this is the closure's `Err` rendered via
+    /// `Display`.
+    #[serde(default = "Vec::new")]
+    pub failure_reasons: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -104,16 +129,28 @@ impl<I: TaskInput> ParallelInput<I> {
 
 /// Aggregated result of a parallel run.
 ///
-/// See [`PipelineOutput`] for why there's no wall-clock duration field.
+/// See [`PipelineOutput`] for why there's no wall-clock duration field
+/// and for the failure-addressing contract on the `failed_indices` /
+/// `failure_reasons` fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParallelOutput<O> {
     /// Per-task results. Ordering matches `tasks` ordering, not
-    /// completion order.
+    /// completion order. Shorter than `tasks.len()` when any task's
+    /// dispatch closure returned `Err` (activity error) under
+    /// `FailureStrategy::Continue` — see `failed_indices` to recover
+    /// the missing positions.
     pub results: Vec<O>,
     /// Count of tasks whose `is_success()` returned `true`.
     pub total_success: usize,
     /// Count of failing tasks.
     pub total_failed: usize,
+    /// Input positions (0-based, into `ParallelInput::tasks`) that
+    /// failed.
+    #[serde(default = "Vec::new")]
+    pub failed_indices: Vec<usize>,
+    /// One error message per `failed_indices` entry.
+    #[serde(default = "Vec::new")]
+    pub failure_reasons: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +225,9 @@ impl<I: TaskInput> ParameterizedLoopInput<I> {
 
 /// Aggregated result of a loop or parameterised-loop run.
 ///
-/// See [`PipelineOutput`] for why there's no wall-clock duration field.
+/// See [`PipelineOutput`] for why there's no wall-clock duration field
+/// and for the failure-addressing contract on the `failed_indices` /
+/// `failure_reasons` fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopOutput<O> {
     /// Per-iteration results in iteration order.
@@ -200,6 +239,12 @@ pub struct LoopOutput<O> {
     /// Number of iterations attempted (`items.len()` or the size of the
     /// cartesian product).
     pub item_count: usize,
+    /// Iteration indices (0-based) that failed.
+    #[serde(default = "Vec::new")]
+    pub failed_indices: Vec<usize>,
+    /// One error message per `failed_indices` entry.
+    #[serde(default = "Vec::new")]
+    pub failure_reasons: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
