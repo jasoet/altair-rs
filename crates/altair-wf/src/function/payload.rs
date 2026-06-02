@@ -312,7 +312,10 @@ pub struct FunctionExecutionOutput {
     /// Handler `data` payload.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub data: Vec<u8>,
-    /// Wall-clock duration of the handler call (in millis on the wire).
+    /// Wall-clock duration of the handler call, **rounded down to
+    /// whole milliseconds** on the wire. Reports `0` for sub-ms
+    /// handlers — use [`elapsed_nanos`](Self::elapsed_nanos) for
+    /// fine-grained observability.
     ///
     /// **Observational only.** Branching on this field from inside a
     /// workflow body breaks Temporal replay determinism — the activity
@@ -322,6 +325,15 @@ pub struct FunctionExecutionOutput {
     /// observability; do not let it influence workflow control flow.
     #[serde(with = "duration_millis_compat")]
     pub duration: Duration,
+    /// Wall-clock handler duration in **nanoseconds** — distinct from
+    /// `duration` (millis) so sub-millisecond handlers still surface
+    /// real timing data. Wire format: bare `u64`. A `u64` of nanos
+    /// covers ~584 years, so saturation is not a practical concern.
+    ///
+    /// Observational only — same workflow-determinism caveat as
+    /// [`duration`](Self::duration).
+    #[serde(default)]
+    pub elapsed_nanos: u64,
     /// Unix-millis when the handler started. Zero on the default
     /// instance.
     ///
@@ -481,6 +493,7 @@ mod tests {
             result: HashMap::from([("k".into(), "v".into())]),
             data: vec![9],
             duration: Duration::from_millis(987),
+            elapsed_nanos: 987_000_000,
             started_at_millis: 1_000,
             finished_at_millis: 1_987,
         };
@@ -489,6 +502,12 @@ mod tests {
         assert_eq!(
             value.get("duration").and_then(serde_json::Value::as_u64),
             Some(987)
+        );
+        // `elapsed_nanos` round-trips alongside the millis field for
+        // sub-millisecond observability.
+        assert_eq!(
+            value.get("elapsed_nanos").and_then(serde_json::Value::as_u64),
+            Some(987_000_000)
         );
         let back: FunctionExecutionOutput = serde_json::from_value(value).unwrap();
         assert_eq!(back.name, "fn");
