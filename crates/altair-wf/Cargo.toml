@@ -53,6 +53,7 @@ async-trait = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow = { workspace = true }
 pretty_assertions = { workspace = true }
+tracing-subscriber = { workspace = true }
 # Required by the SDK's #[workflow] / #[activities] proc-macros, which
 # expand to ::futures, ::futures_util, ::temporalio_sdk, ::temporalio_common,
 # and ::temporalio_macros absolute paths. We re-export the temporalio
@@ -115,3 +116,8 @@ required-features = ["datasync"]
 name = "datasync_chunked"
 path = "examples/datasync_chunked.rs"
 required-features = ["datasync"]
+
+[[example]]
+name = "scheduled_all"
+path = "examples/scheduled_all.rs"
+required-features = ["function", "datasync"]
