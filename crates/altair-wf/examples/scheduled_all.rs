@@ -166,10 +166,7 @@ pub struct ScheduledExecuteOkWf;
 #[workflow_methods]
 impl ScheduledExecuteOkWf {
     #[run]
-    pub async fn run(
-        ctx: &mut WorkflowContext<Self>,
-        _input: (),
-    ) -> WorkflowResult<EchoOut> {
+    pub async fn run(ctx: &mut WorkflowContext<Self>, _input: ()) -> WorkflowResult<EchoOut> {
         let opts = default_activity_options();
         let ctx_ref: &WorkflowContext<Self> = ctx;
         let out = execute(ok(1, "single-success"), dispatch_echo!(ctx_ref, opts))
@@ -186,10 +183,7 @@ pub struct ScheduledExecuteFailWf;
 #[workflow_methods]
 impl ScheduledExecuteFailWf {
     #[run]
-    pub async fn run(
-        ctx: &mut WorkflowContext<Self>,
-        _input: (),
-    ) -> WorkflowResult<EchoOut> {
+    pub async fn run(ctx: &mut WorkflowContext<Self>, _input: ()) -> WorkflowResult<EchoOut> {
         let opts = default_activity_options();
         let ctx_ref: &WorkflowContext<Self> = ctx;
         // is_success() returns false; execute still returns Ok because
@@ -352,11 +346,13 @@ impl ScheduledParallelFailFastWf {
 // ---------------------------------------------------------------------------
 
 fn substitutor() -> Substitutor<EchoIn> {
-    substitutor_from_fn(|template: &EchoIn, item: &str, idx: usize, _params| EchoIn {
-        id: template.id + u32::try_from(idx).unwrap_or(0),
-        msg: format!("{}-{item}", template.msg),
-        will_fail: template.will_fail,
-    })
+    substitutor_from_fn(
+        |template: &EchoIn, item: &str, idx: usize, _params| EchoIn {
+            id: template.id + u32::try_from(idx).unwrap_or(0),
+            msg: format!("{}-{item}", template.msg),
+            will_fail: template.will_fail,
+        },
+    )
 }
 
 #[workflow]
@@ -373,7 +369,11 @@ impl ScheduledLoopSequentialWf {
         let opts = default_activity_options();
         let ctx_ref: &WorkflowContext<Self> = ctx;
         let input = LoopInput {
-            items: vec!["us-east-1".into(), "eu-west-1".into(), "ap-southeast-1".into()],
+            items: vec![
+                "us-east-1".into(),
+                "eu-west-1".into(),
+                "ap-southeast-1".into(),
+            ],
             template: ok(50, "deploy"),
             parallel: false,
             failure_strategy: FailureStrategy::Continue,
@@ -855,12 +855,16 @@ impl ScheduledChunkedCanWf {
             .is_empty()
         {
             ctx_ref
-                .start_activity(DemoActivities::reset_cursor, "scheduled-can".to_string(), opts.clone())
+                .start_activity(
+                    DemoActivities::reset_cursor,
+                    "scheduled-can".to_string(),
+                    opts.clone(),
+                )
                 .await
                 .map_err(|e| anyhow::anyhow!("reset_cursor: {e}"))?;
         }
-        let result = chunked_run!(ctx_ref, opts, "scheduled-can", 2)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let result =
+            chunked_run!(ctx_ref, opts, "scheduled-can", 2).map_err(|e| anyhow::anyhow!("{e}"))?;
         if result.deferred {
             ctx_ref.continue_as_new(&(), ContinueAsNewOptions::default())?;
             unreachable!();
@@ -886,7 +890,11 @@ impl ScheduledChunkedSinglePassWf {
         let ctx_ref: &WorkflowContext<Self> = ctx;
         // This variant never continues-as-new; every fire starts fresh.
         ctx_ref
-            .start_activity(DemoActivities::reset_cursor, "scheduled-single".to_string(), opts.clone())
+            .start_activity(
+                DemoActivities::reset_cursor,
+                "scheduled-single".to_string(),
+                opts.clone(),
+            )
             .await
             .map_err(|e| anyhow::anyhow!("reset_cursor: {e}"))?;
         // max_per_exec = 0 disables truncation; entire list runs once.
@@ -916,29 +924,109 @@ fn workflow_id(suffix: &str) -> String {
 /// `(workflow_type, schedule_suffix, interval, note)`.
 const SCHEDULE_PLAN: &[(&str, &str, u64, &str)] = &[
     // execute
-    ("ScheduledExecuteOkWf",            "execute-ok",        2, "execute pattern, single task success"),
-    ("ScheduledExecuteFailWf",          "execute-fail",      3, "execute pattern, business-logic failure (is_success=false)"),
+    (
+        "ScheduledExecuteOkWf",
+        "execute-ok",
+        2,
+        "execute pattern, single task success",
+    ),
+    (
+        "ScheduledExecuteFailWf",
+        "execute-fail",
+        3,
+        "execute pattern, business-logic failure (is_success=false)",
+    ),
     // pipeline
-    ("ScheduledPipelineAllOkWf",        "pipeline-all-ok",   2, "pipeline, all steps succeed"),
-    ("ScheduledPipelineContinueWf",     "pipeline-continue", 3, "pipeline, mixed success with stop_on_error=false"),
-    ("ScheduledPipelineStopWf",         "pipeline-stop",     2, "pipeline, stop_on_error=true → workflow fails on mid failure"),
+    (
+        "ScheduledPipelineAllOkWf",
+        "pipeline-all-ok",
+        2,
+        "pipeline, all steps succeed",
+    ),
+    (
+        "ScheduledPipelineContinueWf",
+        "pipeline-continue",
+        3,
+        "pipeline, mixed success with stop_on_error=false",
+    ),
+    (
+        "ScheduledPipelineStopWf",
+        "pipeline-stop",
+        2,
+        "pipeline, stop_on_error=true → workflow fails on mid failure",
+    ),
     // parallel
-    ("ScheduledParallelContinueWf",     "parallel-continue", 3, "parallel, Continue strategy collects every outcome"),
-    ("ScheduledParallelFailFastWf",     "parallel-fail-fast",2, "parallel, FailFast → workflow fails on first failure"),
+    (
+        "ScheduledParallelContinueWf",
+        "parallel-continue",
+        3,
+        "parallel, Continue strategy collects every outcome",
+    ),
+    (
+        "ScheduledParallelFailFastWf",
+        "parallel-fail-fast",
+        2,
+        "parallel, FailFast → workflow fails on first failure",
+    ),
     // loop
-    ("ScheduledLoopSequentialWf",       "loop-sequential",   3, "run_loop sequential per-item"),
-    ("ScheduledLoopParallelWf",         "loop-parallel",     2, "run_loop parallel per-item"),
+    (
+        "ScheduledLoopSequentialWf",
+        "loop-sequential",
+        3,
+        "run_loop sequential per-item",
+    ),
+    (
+        "ScheduledLoopParallelWf",
+        "loop-parallel",
+        2,
+        "run_loop parallel per-item",
+    ),
     // parameterized loop
-    ("ScheduledParameterizedLoopWf",    "parameterized-loop",3, "parameterized_loop cartesian product"),
+    (
+        "ScheduledParameterizedLoopWf",
+        "parameterized-loop",
+        3,
+        "parameterized_loop cartesian product",
+    ),
     // DAG
-    ("ScheduledDagDiamondWf",           "dag-diamond",       2, "run_dag, diamond (build/test/lint/deploy)"),
-    ("ScheduledDagLinearWf",            "dag-linear",        3, "run_dag, linear chain a→b→c→d"),
+    (
+        "ScheduledDagDiamondWf",
+        "dag-diamond",
+        2,
+        "run_dag, diamond (build/test/lint/deploy)",
+    ),
+    (
+        "ScheduledDagLinearWf",
+        "dag-linear",
+        3,
+        "run_dag, linear chain a→b→c→d",
+    ),
     // function feature
-    ("ScheduledFunctionSuccessWf",      "function-success",  2, "function: registry pipeline, all handlers succeed"),
-    ("ScheduledFunctionMixedWf",        "function-mixed",    3, "function: middle handler reports success=false"),
+    (
+        "ScheduledFunctionSuccessWf",
+        "function-success",
+        2,
+        "function: registry pipeline, all handlers succeed",
+    ),
+    (
+        "ScheduledFunctionMixedWf",
+        "function-mixed",
+        3,
+        "function: middle handler reports success=false",
+    ),
     // chunked datasync
-    ("ScheduledChunkedCanWf",           "chunked-can",       3, "datasync chunk + continue-as-new (3 executions per fire)"),
-    ("ScheduledChunkedSinglePassWf",    "chunked-single",    2, "datasync chunk, all partitions in one execution"),
+    (
+        "ScheduledChunkedCanWf",
+        "chunked-can",
+        3,
+        "datasync chunk + continue-as-new (3 executions per fire)",
+    ),
+    (
+        "ScheduledChunkedSinglePassWf",
+        "chunked-single",
+        2,
+        "datasync chunk, all partitions in one execution",
+    ),
 ];
 
 async fn register_schedules(client: &Client, task_queue: &str) -> anyhow::Result<()> {
@@ -968,7 +1056,9 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let chunked_state = Arc::new(DemoState {
-        partitions: (0..6).map(|i| Partition::new(i * 10, (i + 1) * 10)).collect(),
+        partitions: (0..6)
+            .map(|i| Partition::new(i * 10, (i + 1) * 10))
+            .collect(),
         ..DemoState::default()
     });
 

@@ -506,7 +506,9 @@ mod tests {
         // `elapsed_nanos` round-trips alongside the millis field for
         // sub-millisecond observability.
         assert_eq!(
-            value.get("elapsed_nanos").and_then(serde_json::Value::as_u64),
+            value
+                .get("elapsed_nanos")
+                .and_then(serde_json::Value::as_u64),
             Some(987_000_000)
         );
         let back: FunctionExecutionOutput = serde_json::from_value(value).unwrap();
