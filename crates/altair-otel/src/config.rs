@@ -148,23 +148,24 @@ impl ConfigBuilder {
 
     /// Build the [`Config`].
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `service_name` was not set.
-    #[must_use]
-    pub fn build(self) -> Config {
+    /// Returns [`Error::Configuration`] if `service_name` was not set or empty.
+    pub fn build(self) -> Result<Config> {
         let i = self
             .inner
-            .expect("ConfigBuilder::build() called on empty builder");
-        assert!(!i.service_name.is_empty(), "service_name is required");
-        Config {
+            .ok_or_else(|| Error::Configuration("ConfigBuilder is empty".into()))?;
+        if i.service_name.trim().is_empty() {
+            return Err(Error::Configuration("service_name is required".into()));
+        }
+        Ok(Config {
             service_name: i.service_name,
             service_version: i.service_version,
             otlp_endpoint: i.otlp_endpoint,
             resource_attributes: i.resource_attributes,
             exporter: i.exporter,
             log_format: i.log_format,
-        }
+        })
     }
 }
 
@@ -179,16 +180,17 @@ mod tests {
             .service_name("svc")
             .service_version("1.2.3")
             .resource_attribute("env", "test")
-            .build();
+            .build()
+            .unwrap();
         assert_eq!(c.service_name, "svc");
         assert_eq!(c.service_version, Some("1.2.3".into()));
         assert_eq!(c.resource_attributes, vec![("env".into(), "test".into())]);
     }
 
     #[test]
-    #[should_panic(expected = "service_name is required")]
-    fn build_panics_without_name() {
-        let _ = Config::builder().service_version("v").build();
+    fn build_errors_without_name() {
+        let r = Config::builder().service_version("v").build();
+        assert!(matches!(r, Err(Error::Configuration(_))));
     }
 
     #[test]
@@ -212,7 +214,8 @@ mod tests {
             .resource_attribute("tier", "prod")
             .exporter(Exporter::Stdout)
             .log_format(LogFormat::Json)
-            .build();
+            .build()
+            .unwrap();
         assert_eq!(c.service_name, "full");
         assert_eq!(c.service_version.as_deref(), Some("9.9.9"));
         assert_eq!(c.otlp_endpoint.as_deref(), Some("http://collector:4317"));

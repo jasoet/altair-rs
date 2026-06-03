@@ -22,6 +22,10 @@ pub enum Error {
         /// Reason it was rejected.
         message: String,
     },
+
+    /// Invalid configuration supplied to the builder.
+    #[error("invalid configuration: {0}")]
+    Configuration(String),
 }
 
 /// Convenience result alias.

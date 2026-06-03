@@ -9,7 +9,8 @@ async fn init_with_none_exporter_succeeds() {
     let cfg = Config::builder()
         .service_name("test-svc")
         .exporter(Exporter::None)
-        .build();
+        .build()
+        .unwrap();
     let r = cfg.init();
     // Either Ok (first call) or AlreadyInitialized (if a previous test ran first in this process).
     assert!(r.is_ok() || matches!(r, Err(altair_otel::Error::AlreadyInitialized)));

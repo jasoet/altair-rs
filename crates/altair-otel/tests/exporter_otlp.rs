@@ -20,7 +20,8 @@ async fn span_exports_to_real_collector() {
         .service_name("altair-otel-integration")
         .otlp_endpoint(collector.grpc_endpoint())
         .exporter(Exporter::Otlp)
-        .build();
+        .build()
+        .unwrap();
 
     cfg.init().expect("init OTel pipeline against container");
 

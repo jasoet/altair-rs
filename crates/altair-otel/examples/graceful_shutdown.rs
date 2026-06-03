@@ -16,6 +16,7 @@ async fn main() -> anyhow::Result<()> {
         .service_name("graceful-demo")
         .exporter(Exporter::Stdout)
         .build()
+        .unwrap()
         .init()?;
 
     info!("service started, press Ctrl-C to exit");

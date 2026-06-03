@@ -9,7 +9,8 @@ async fn init_with_stdout_exporter_succeeds() {
         .service_version("0.1.0")
         .resource_attribute("env", "test")
         .exporter(Exporter::Stdout)
-        .build();
+        .build()
+        .unwrap();
     let r = cfg.init();
     assert!(
         r.is_ok() || matches!(r, Err(altair_otel::Error::AlreadyInitialized)),

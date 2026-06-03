@@ -51,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
         .service_name("instrumented-demo")
         .exporter(Exporter::Stdout)
         .build()
+        .unwrap()
         .init()?;
 
     let db = Database {

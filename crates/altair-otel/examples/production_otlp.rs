@@ -30,6 +30,7 @@ async fn main() -> anyhow::Result<()> {
         .exporter(Exporter::Otlp)
         .log_format(altair_otel::LogFormat::Json)
         .build()
+        .unwrap()
         .init()?;
 
     info!(endpoint = %endpoint, "telemetry pipeline up");
