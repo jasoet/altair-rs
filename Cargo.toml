@@ -81,16 +81,10 @@ uuid = { version = "1", features = ["v4"] }
 log = "0.4"
 sea-orm = { version = "1", default-features = false, features = [
     "runtime-tokio-rustls",
-    "sqlx-postgres",
-    "sqlx-mysql",
-    "sqlx-sqlite",
     "macros",
 ] }
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio-rustls",
-    "postgres",
-    "mysql",
-    "sqlite",
     "migrate",
 ] }
 humantime-serde = "1"
