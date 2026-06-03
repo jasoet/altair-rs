@@ -13,6 +13,7 @@ async fn main() -> anyhow::Result<()> {
         .service_name("metrics-demo")
         .exporter(Exporter::Stdout)
         .build()
+        .unwrap()
         .init()?;
 
     let m = meter();

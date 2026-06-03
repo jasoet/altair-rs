@@ -20,7 +20,8 @@
 //! let cfg = altair_otel::Config::builder()
 //!     .service_name("my-service")
 //!     .otlp_endpoint(collector.grpc_endpoint())
-//!     .build();
+//!     .build()
+//!     .unwrap();
 //! cfg.init()?;
 //! # Ok(()) }
 //! # }

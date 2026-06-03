@@ -20,6 +20,7 @@ async fn main() -> anyhow::Result<()> {
         .service_version("0.1.0")
         .exporter(Exporter::Stdout)
         .build()
+        .unwrap()
         .init()?;
 
     let client = Client::builder().base_url("https://httpbin.org")?.build()?;
