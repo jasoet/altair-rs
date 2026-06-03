@@ -1,6 +1,10 @@
 //! `FunctionActivities` — the stateful Temporal activity that dispatches
 //! to registered handlers by name.
 
+// The SDK's #[activities] macro expands to consts and trait impls
+// that don't carry doc comments — relax the missing docs check here.
+#![allow(missing_docs)]
+
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::time::SystemTime;
