@@ -14,9 +14,9 @@ categories = ["database"]
 
 [features]
 default = ["postgres", "mysql", "sqlite"]
-postgres = []
-mysql = []
-sqlite = []
+postgres = ["sea-orm/sqlx-postgres", "sqlx/postgres"]
+mysql = ["sea-orm/sqlx-mysql", "sqlx/mysql"]
+sqlite = ["sea-orm/sqlx-sqlite", "sqlx/sqlite"]
 
 [dependencies]
 sea-orm = { workspace = true }
