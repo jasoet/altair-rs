@@ -84,14 +84,18 @@ pub struct PipelineOutput<O> {
     /// both business-logic failures (`is_success()` returned false)
     /// and activity errors (the dispatch closure returned `Err`).
     ///
+    /// Omitted from the wire format when empty (so the JSON is small
+    /// and a downstream `null` vs `[]` distinction never surfaces);
+    /// deserialises as an empty vec when the field is absent.
+    ///
     /// [`failure_reasons`]: Self::failure_reasons
-    #[serde(default = "Vec::new")]
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub failed_indices: Vec<usize>,
     /// One error message per `failed_indices` entry. For
     /// business-logic failures this is `TaskOutput::error()`; for
     /// activity errors this is the closure's `Err` rendered via
     /// `Display`.
-    #[serde(default = "Vec::new")]
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub failure_reasons: Vec<String>,
 }
 
@@ -156,11 +160,12 @@ pub struct ParallelOutput<O> {
     /// Count of failing tasks.
     pub total_failed: usize,
     /// Input positions (0-based, into `ParallelInput::tasks`) that
-    /// failed.
-    #[serde(default = "Vec::new")]
+    /// failed. Omitted from the wire format when empty.
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub failed_indices: Vec<usize>,
-    /// One error message per `failed_indices` entry.
-    #[serde(default = "Vec::new")]
+    /// One error message per `failed_indices` entry. Omitted from the
+    /// wire format when empty.
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub failure_reasons: Vec<String>,
 }
 
@@ -266,11 +271,13 @@ pub struct LoopOutput<O> {
     /// Number of iterations attempted (`items.len()` or the size of the
     /// cartesian product).
     pub item_count: usize,
-    /// Iteration indices (0-based) that failed.
-    #[serde(default = "Vec::new")]
+    /// Iteration indices (0-based) that failed. Omitted from the
+    /// wire format when empty.
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub failed_indices: Vec<usize>,
-    /// One error message per `failed_indices` entry.
-    #[serde(default = "Vec::new")]
+    /// One error message per `failed_indices` entry. Omitted from the
+    /// wire format when empty.
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub failure_reasons: Vec<String>,
 }
 

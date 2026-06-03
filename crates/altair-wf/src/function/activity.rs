@@ -128,6 +128,9 @@ impl FunctionActivities {
 
         let finished = started.elapsed();
         let finished_at_millis = unix_millis();
+        // u64 nanos covers ~584 years; saturation only matters for
+        // pathological/test handlers.
+        let elapsed_nanos = u64::try_from(finished.as_nanos()).unwrap_or(u64::MAX);
 
         let out = match result {
             Ok(Ok(output)) => FunctionExecutionOutput {
@@ -137,6 +140,7 @@ impl FunctionActivities {
                 result: output.result,
                 data: output.data,
                 duration: finished,
+                elapsed_nanos,
                 started_at_millis,
                 finished_at_millis,
             },
@@ -151,6 +155,7 @@ impl FunctionActivities {
                 result: std::collections::HashMap::new(),
                 data: Vec::new(),
                 duration: finished,
+                elapsed_nanos,
                 started_at_millis,
                 finished_at_millis,
             },
@@ -161,6 +166,7 @@ impl FunctionActivities {
                 result: std::collections::HashMap::new(),
                 data: Vec::new(),
                 duration: finished,
+                elapsed_nanos,
                 started_at_millis,
                 finished_at_millis,
             },
