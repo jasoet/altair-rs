@@ -1,11 +1,9 @@
-// The SDK's #[activities] macro expands to consts and trait impls
-// that don't carry doc comments — relax the workspace deny here for
-// just this module. The RwLock-poison panics in the Registry are
+// The RwLock-poison panics in the Registry are
 // theoretically reachable but not worth a `# Panics` block on every
 // method (the lock would only poison if a previous handler panicked
 // while holding it, in which case the whole worker is already in a
 // bad state).
-#![allow(missing_docs, clippy::missing_panics_doc)]
+#![allow(clippy::missing_panics_doc)]
 
 //! Named-handler dispatch on top of the workflow patterns.
 //!
