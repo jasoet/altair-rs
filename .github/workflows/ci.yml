@@ -51,6 +51,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --all-features
 
+  feature-combos:
+    name: feature combos (altair-db)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: [postgres, mysql, sqlite]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p altair-db --no-default-features --features ${{ matrix.features }} -- -D warnings
+
   doc:
     name: doc
     runs-on: ubuntu-latest

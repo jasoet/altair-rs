@@ -49,11 +49,10 @@ impl Db {
     #[cfg(feature = "postgres")]
     #[must_use]
     pub fn pg_pool(&self) -> Option<&sqlx::PgPool> {
-        match &self.conn {
-            DatabaseConnection::SqlxPostgresPoolConnection(_) => {
-                Some(self.conn.get_postgres_connection_pool())
-            }
-            _ => None,
+        if let DatabaseConnection::SqlxPostgresPoolConnection(_) = &self.conn {
+            Some(self.conn.get_postgres_connection_pool())
+        } else {
+            None
         }
     }
 
@@ -63,11 +62,10 @@ impl Db {
     #[cfg(feature = "mysql")]
     #[must_use]
     pub fn mysql_pool(&self) -> Option<&sqlx::MySqlPool> {
-        match &self.conn {
-            DatabaseConnection::SqlxMySqlPoolConnection(_) => {
-                Some(self.conn.get_mysql_connection_pool())
-            }
-            _ => None,
+        if let DatabaseConnection::SqlxMySqlPoolConnection(_) = &self.conn {
+            Some(self.conn.get_mysql_connection_pool())
+        } else {
+            None
         }
     }
 
@@ -77,11 +75,10 @@ impl Db {
     #[cfg(feature = "sqlite")]
     #[must_use]
     pub fn sqlite_pool(&self) -> Option<&sqlx::SqlitePool> {
-        match &self.conn {
-            DatabaseConnection::SqlxSqlitePoolConnection(_) => {
-                Some(self.conn.get_sqlite_connection_pool())
-            }
-            _ => None,
+        if let DatabaseConnection::SqlxSqlitePoolConnection(_) = &self.conn {
+            Some(self.conn.get_sqlite_connection_pool())
+        } else {
+            None
         }
     }
 
@@ -128,6 +125,15 @@ impl Db {
                     .sqlite_pool()
                     .ok_or_else(|| Error::Configuration("sqlite pool missing".to_string()))?;
                 migrator.run(pool).await?;
+            }
+            // Unreachable in practice — `Db::connect` cannot connect to a
+            // backend whose driver isn't compiled in — but required for
+            // exhaustiveness when not all backend features are enabled.
+            #[allow(unreachable_patterns)]
+            other => {
+                return Err(Error::Configuration(format!(
+                    "backend {other:?} is not enabled in this build of altair-db"
+                )));
             }
         }
         Ok(())
