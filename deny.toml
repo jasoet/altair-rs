@@ -11,6 +11,11 @@ ignore = [
   # constant-time alternative. Mitigation: deploy MySQL on a private
   # network. Re-evaluate when rsa crate ships a patched release.
   "RUSTSEC-2023-0071",
+  # proc-macro-error2 unmaintained (maintainer confirmed; whole
+  # proc-macro-error lineage is abandoned). Build-time proc-macro only,
+  # no runtime attack surface. Pulled via sea-orm-macros (sea-bae) and
+  # validator_derive. Drop when those upstreams migrate off it.
+  "RUSTSEC-2026-0173",
   # rustls-pemfile unmaintained. Pulled transitively; no exploit, just
   # archived repo. Replace when downstream deps migrate to rustls-pki-types.
   "RUSTSEC-2025-0134",
