@@ -35,7 +35,7 @@ integration-tests = [
 ]
 
 [dependencies]
-altair-temporal = { path = "../altair-temporal", version = "0.2" }
+altair-temporal = { path = "../altair-temporal", version = "0.3" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
