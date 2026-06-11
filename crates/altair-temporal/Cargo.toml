@@ -36,7 +36,7 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
-altair-base32 = { path = "../altair-base32", version = "0.2" }
+altair-base32 = { path = "../altair-base32", version = "0.3" }
 # Optional: enabled by the `testcontainers` feature.
 testcontainers = { workspace = true, optional = true }
 
