@@ -51,7 +51,7 @@ opentelemetry-semantic-conventions = "0.32"
 figment = { version = "0.10", features = ["toml", "env"] }
 validator = { version = "0.20", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+toml = "1"
 
 # Encoding
 base32 = "0.5"
@@ -74,7 +74,7 @@ wiremock = "0.6"
 # HTTP server
 axum = { version = "0.8", default-features = true }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "request-id", "timeout", "cors", "compression-full", "limit", "util"] }
+tower-http = { version = "0.7", features = ["trace", "request-id", "timeout", "cors", "compression-full", "limit", "util"] }
 uuid = { version = "1", features = ["v4"] }
 
 # Database
@@ -88,15 +88,19 @@ sqlx = { version = "0.8", default-features = false, features = [
     "migrate",
 ] }
 humantime-serde = "1"
-testcontainers = "0.23"
-testcontainers-modules = { version = "0.11", features = ["postgres", "mysql"] }
+testcontainers = "0.27"
+testcontainers-modules = { version = "0.15", features = ["postgres", "mysql"] }
 
 # Temporal
-temporalio-sdk = "~0.4"
-temporalio-sdk-core = "~0.4"
-temporalio-client = "~0.4"
-temporalio-common = "~0.4"
-temporalio-macros = "~0.4"
+temporalio-sdk = "~0.5"
+temporalio-sdk-core = "~0.5"
+temporalio-client = "~0.5"
+temporalio-common = "~0.5"
+temporalio-macros = "~0.5"
+# Required as a direct dependency by every crate that invokes the
+# `#[workflow]` / `#[workflow_methods]` macros: their expansions
+# reference `::temporalio_workflow` paths (new in SDK 0.5).
+temporalio-workflow = "~0.5"
 prost-wkt-types = "0.7"
 
 # Retry

@@ -124,5 +124,9 @@ async fn build_tls(cfg: &TlsConfig) -> Result<TlsOptions> {
         server_root_ca_cert: ca,
         domain: cfg.server_name_override.clone(),
         client_tls_options: client_tls,
+        // Custom rustls verifiers are deliberately not exposed through
+        // `Config` — the file-based CA/mTLS options above cover the
+        // supported deployment shapes.
+        server_cert_verifier: None,
     })
 }

@@ -56,15 +56,17 @@ pretty_assertions = { workspace = true }
 tracing-subscriber = { workspace = true }
 # Required by the SDK's #[workflow] / #[activities] proc-macros, which
 # expand to ::futures, ::futures_util, ::temporalio_sdk, ::temporalio_common,
-# and ::temporalio_macros absolute paths. We re-export the temporalio
-# crates via altair-temporal, but the macros need them resolvable from
-# the test crate root — hence the explicit dev-deps here.
+# ::temporalio_workflow, and ::temporalio_macros absolute paths. We
+# re-export the temporalio crates via altair-temporal, but the macros
+# need them resolvable from the test crate root — hence the explicit
+# dev-deps here.
 futures = { workspace = true }
 futures-util = "0.3"
 serde = { workspace = true }
 temporalio-sdk = { workspace = true }
 temporalio-common = { workspace = true }
 temporalio-macros = { workspace = true }
+temporalio-workflow = { workspace = true }
 # `async-trait` is also needed by the datasync_runner example which
 # implements `Source` / `Sink` traits in the example body.
 async-trait = { workspace = true }

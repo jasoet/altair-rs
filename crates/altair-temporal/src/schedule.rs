@@ -239,11 +239,16 @@ fn to_spec(s: &Schedule) -> ScheduleSpec {
 }
 
 fn to_create_options(s: &Schedule) -> CreateScheduleOptions {
-    let action = ScheduleAction::start_workflow(
-        s.workflow_type.clone().expect("validated above"),
-        s.task_queue.clone().expect("validated above"),
-        s.workflow_id.clone().expect("validated above"),
-    );
+    // Constructed as a variant literal rather than through
+    // `ScheduleAction::start_workflow`, which requires a typed
+    // `WorkflowDefinition` plus an input value — this builder is
+    // string-based and schedules its workflows without input.
+    let action = ScheduleAction::StartWorkflow {
+        workflow_type: s.workflow_type.clone().expect("validated above"),
+        task_queue: s.task_queue.clone().expect("validated above"),
+        workflow_id: s.workflow_id.clone().expect("validated above"),
+        input: None,
+    };
     let spec = to_spec(s);
     let note = s.note.clone().unwrap_or_default();
     CreateScheduleOptions::builder()
