@@ -9,6 +9,14 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  # Keep the target dir small enough for the runner disk + rust-cache.
+  # Incremental artifacts are useless on ephemeral runners, and debuginfo
+  # for the full all-features dependency tree (temporal SDK, sqlx, tonic,
+  # aws-lc, ...) is what blew past the disk limit — backtraces in test
+  # failures still resolve symbol names without it.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
