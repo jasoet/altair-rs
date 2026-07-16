@@ -15,7 +15,12 @@ use crate::client::Client;
 use crate::config::Config;
 use crate::error::{Error, Result};
 
-type Registration = Box<dyn FnOnce(&mut temporalio_sdk::WorkerOptions) + Send>;
+type Registration = Box<
+    dyn FnOnce(
+            &mut temporalio_sdk::WorkerOptions,
+        ) -> std::result::Result<(), temporalio_sdk::WorkflowRegistrationError>
+        + Send,
+>;
 
 /// Builder for [`Worker`].
 ///
@@ -80,15 +85,15 @@ impl WorkerBuilder {
 
     /// Register a workflow type for this worker.
     ///
-    /// The trait bound matches the SDK's macro-generated `WorkflowImplementer`.
+    /// The trait bound matches the SDK's macro-generated `WorkflowImplementation`.
     #[must_use]
     pub fn register_workflow<W>(mut self) -> Self
     where
-        W: temporalio_sdk::workflows::WorkflowImplementer + 'static,
+        W: temporalio_sdk::workflows::WorkflowImplementation + 'static,
+        <W::Run as temporalio_common::WorkflowDefinition>::Input: Send,
     {
-        self.registrations.push(Box::new(|opts| {
-            opts.register_workflow::<W>();
-        }));
+        self.registrations
+            .push(Box::new(|opts| opts.register_workflow::<W>().map(|_| ())));
         self
     }
 
@@ -100,6 +105,7 @@ impl WorkerBuilder {
     {
         self.registrations.push(Box::new(move |opts| {
             opts.register_activities(instance);
+            Ok(())
         }));
         self
     }
@@ -150,7 +156,8 @@ impl WorkerBuilder {
             .build();
 
         for reg in self.registrations {
-            reg(&mut worker_opts);
+            reg(&mut worker_opts)
+                .map_err(|e| Error::worker(format!("workflow registration: {e}")))?;
         }
 
         let sdk_worker = temporalio_sdk::Worker::new(&runtime, client, worker_opts)

@@ -29,6 +29,7 @@ temporalio-sdk-core = { workspace = true }
 temporalio-client = { workspace = true }
 temporalio-common = { workspace = true }
 temporalio-macros = { workspace = true }
+temporalio-workflow = { workspace = true }
 prost-wkt-types = { workspace = true }
 url = { workspace = true }
 serde = { workspace = true }

@@ -18,6 +18,11 @@ pub use crate::{
 // SDK macros most consumers reach for when defining workflows / activities.
 // Re-exported so users don't need to add `temporalio-macros` to their
 // dependencies just to write `#[workflow]` / `#[activity]`.
+//
+// NOTE: the macro *expansions* reference `::temporalio_sdk`,
+// `::temporalio_common`, and (for the workflow macros) `::temporalio_workflow`
+// as absolute paths, so consumer crates still need those as direct
+// dependencies for the macros to compile.
 pub use ::temporalio_macros::{
     activities, activity, init, query, run, signal, update, update_validator, workflow,
     workflow_methods,

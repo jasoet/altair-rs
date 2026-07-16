@@ -42,3 +42,4 @@ pub use ::temporalio_common;
 pub use ::temporalio_macros;
 pub use ::temporalio_sdk;
 pub use ::temporalio_sdk_core;
+pub use ::temporalio_workflow;

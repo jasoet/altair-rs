@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
 - **`RetryPolicy::builder()`** — replaces hand-built `prost_wkt_types::Duration` proto with a `.max_attempts(5).backoff_coefficient(2.0).non_retryable("X").build()` chain.
 - **`Schedule::builder()`** — `cron`/`interval`/`note`/`paused`/`start_workflow` then terminal `create`/`update`/`delete_schedule(client, id)`.
 - **`classify_error()`** — `ActivityError` construction with `non_retryable` decided by a predicate.
-- **`workflow_id::encode` / `decode`** — pack a small structured payload into a workflow ID (sidestepping the SDK's "scheduled workflows can't carry input" limitation).
+- **`workflow_id::encode` / `decode`** — pack a small structured payload into a workflow ID. (Originally a workaround for scheduled workflows not carrying input; SDK 0.5's `ScheduleAction::start_workflow` now accepts input directly, but the helper remains useful for run-scoped IDs.)
 
 ## Examples
 
