@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-17
+
+### Changed
+
+- **(temporal)** **BREAKING:** upgrade temporalio SDK `~0.4` → `~0.5` and testcontainers to 0.27 — re-exported SDK types now come from temporalio 0.5 ([#68](https://github.com/jasoet/altair-rs/pull/68))
+
 ## [0.3.0] - 2026-06-11
 
 
