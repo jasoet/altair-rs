@@ -47,7 +47,7 @@ async fn migrate_runs_and_tracks_history() {
         db.orm().get_database_backend(),
         "SELECT version FROM _sqlx_migrations ORDER BY version".to_string(),
     );
-    let rows = db.orm().query_all(stmt).await.unwrap();
+    let rows = db.orm().query_all_raw(stmt).await.unwrap();
     assert_eq!(rows.len(), 2);
 }
 
@@ -64,7 +64,7 @@ async fn transaction_commits_and_rolls_back() {
     let db = connect().await;
     let backend = db.orm().get_database_backend();
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "CREATE TABLE t (n INTEGER)".to_string(),
         ))
@@ -74,7 +74,7 @@ async fn transaction_commits_and_rolls_back() {
     // commit
     db.transaction::<_, (), sea_orm::DbErr>(|tx| {
         Box::pin(async move {
-            tx.execute(Statement::from_string(
+            tx.execute_raw(Statement::from_string(
                 sea_orm::DatabaseBackend::Sqlite,
                 "INSERT INTO t (n) VALUES (1)".to_string(),
             ))
@@ -89,7 +89,7 @@ async fn transaction_commits_and_rolls_back() {
     let _ = db
         .transaction::<_, (), sea_orm::DbErr>(|tx| {
             Box::pin(async move {
-                tx.execute(Statement::from_string(
+                tx.execute_raw(Statement::from_string(
                     sea_orm::DatabaseBackend::Sqlite,
                     "INSERT INTO t (n) VALUES (2)".to_string(),
                 ))
@@ -101,7 +101,7 @@ async fn transaction_commits_and_rolls_back() {
 
     let row = db
         .orm()
-        .query_one(Statement::from_string(
+        .query_one_raw(Statement::from_string(
             backend,
             "SELECT COUNT(*) AS c FROM t".to_string(),
         ))

@@ -40,6 +40,11 @@ impl Db {
             sea_orm::DatabaseBackend::Postgres => Backend::Postgres,
             sea_orm::DatabaseBackend::MySql => Backend::MySql,
             sea_orm::DatabaseBackend::Sqlite => Backend::Sqlite,
+            // `DatabaseBackend` became `#[non_exhaustive]` in sea-orm 2.
+            // altair-db only ever connects to the three backends above
+            // (their drivers are feature-gated), so any other variant is
+            // unreachable in practice.
+            _ => unreachable!("altair-db supports only Postgres, MySQL, and SQLite"),
         }
     }
 
@@ -49,7 +54,7 @@ impl Db {
     #[cfg(feature = "postgres")]
     #[must_use]
     pub fn pg_pool(&self) -> Option<&sqlx::PgPool> {
-        if let DatabaseConnection::SqlxPostgresPoolConnection(_) = &self.conn {
+        if self.conn.get_database_backend() == sea_orm::DatabaseBackend::Postgres {
             Some(self.conn.get_postgres_connection_pool())
         } else {
             None
@@ -62,7 +67,7 @@ impl Db {
     #[cfg(feature = "mysql")]
     #[must_use]
     pub fn mysql_pool(&self) -> Option<&sqlx::MySqlPool> {
-        if let DatabaseConnection::SqlxMySqlPoolConnection(_) = &self.conn {
+        if self.conn.get_database_backend() == sea_orm::DatabaseBackend::MySql {
             Some(self.conn.get_mysql_connection_pool())
         } else {
             None
@@ -75,7 +80,7 @@ impl Db {
     #[cfg(feature = "sqlite")]
     #[must_use]
     pub fn sqlite_pool(&self) -> Option<&sqlx::SqlitePool> {
-        if let DatabaseConnection::SqlxSqlitePoolConnection(_) = &self.conn {
+        if self.conn.get_database_backend() == sea_orm::DatabaseBackend::Sqlite {
             Some(self.conn.get_sqlite_connection_pool())
         } else {
             None
@@ -87,7 +92,7 @@ impl Db {
         use sea_orm::Statement;
         let backend = self.conn.get_database_backend();
         let stmt = Statement::from_string(backend, "SELECT 1".to_string());
-        self.conn.execute(stmt).await.map_err(Error::Orm)?;
+        self.conn.execute_raw(stmt).await.map_err(Error::Orm)?;
         Ok(())
     }
 
@@ -238,7 +243,7 @@ mod tests {
             db.orm().get_database_backend(),
             "INSERT INTO widgets (name) VALUES ('test')".to_string(),
         );
-        db.orm().execute(stmt).await.unwrap();
+        db.orm().execute_raw(stmt).await.unwrap();
     }
 
     #[tokio::test]
@@ -250,7 +255,7 @@ mod tests {
             .unwrap();
         let backend = db.orm().get_database_backend();
         db.orm()
-            .execute(Statement::from_string(
+            .execute_raw(Statement::from_string(
                 backend,
                 "CREATE TABLE k (n INTEGER)".to_string(),
             ))
@@ -259,7 +264,7 @@ mod tests {
 
         db.transaction(|tx| {
             Box::pin(async move {
-                tx.execute(Statement::from_string(
+                tx.execute_raw(Statement::from_string(
                     sea_orm::DatabaseBackend::Sqlite,
                     "INSERT INTO k (n) VALUES (1)".to_string(),
                 ))
@@ -272,7 +277,7 @@ mod tests {
 
         let res = db
             .orm()
-            .query_one(Statement::from_string(
+            .query_one_raw(Statement::from_string(
                 backend,
                 "SELECT COUNT(*) AS c FROM k".to_string(),
             ))
@@ -292,7 +297,7 @@ mod tests {
             .unwrap();
         let backend = db.orm().get_database_backend();
         db.orm()
-            .execute(Statement::from_string(
+            .execute_raw(Statement::from_string(
                 backend,
                 "CREATE TABLE k (n INTEGER)".to_string(),
             ))
@@ -302,7 +307,7 @@ mod tests {
         let res: std::result::Result<(), sea_orm::TransactionError<sea_orm::DbErr>> = db
             .transaction(|tx| {
                 Box::pin(async move {
-                    tx.execute(Statement::from_string(
+                    tx.execute_raw(Statement::from_string(
                         sea_orm::DatabaseBackend::Sqlite,
                         "INSERT INTO k (n) VALUES (1)".to_string(),
                     ))
@@ -315,7 +320,7 @@ mod tests {
 
         let res = db
             .orm()
-            .query_one(Statement::from_string(
+            .query_one_raw(Statement::from_string(
                 backend,
                 "SELECT COUNT(*) AS c FROM k".to_string(),
             ))

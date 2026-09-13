@@ -38,7 +38,7 @@ async fn orm_round_trip() {
     let (db, _c) = start().await;
     let backend = db.orm().get_database_backend();
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "CREATE TABLE widgets (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(64) NOT NULL)"
                 .to_string(),
@@ -46,7 +46,7 @@ async fn orm_round_trip() {
         .await
         .unwrap();
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "INSERT INTO widgets (name) VALUES ('a'), ('b'), ('c')".to_string(),
         ))
@@ -54,7 +54,7 @@ async fn orm_round_trip() {
         .unwrap();
     let row = db
         .orm()
-        .query_one(Statement::from_string(
+        .query_one_raw(Statement::from_string(
             backend,
             "SELECT COUNT(*) AS c FROM widgets".to_string(),
         ))

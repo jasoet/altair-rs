@@ -59,14 +59,14 @@ async fn orm_crud_round_trip() {
     let (db, _c) = start().await;
     let backend = db.orm().get_database_backend();
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "CREATE TABLE widgets (id SERIAL PRIMARY KEY, name TEXT NOT NULL)".to_string(),
         ))
         .await
         .unwrap();
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "INSERT INTO widgets (name) VALUES ('a'), ('b')".to_string(),
         ))
@@ -74,7 +74,7 @@ async fn orm_crud_round_trip() {
         .unwrap();
     let row = db
         .orm()
-        .query_one(Statement::from_string(
+        .query_one_raw(Statement::from_string(
             backend,
             "SELECT COUNT(*) AS c FROM widgets".to_string(),
         ))

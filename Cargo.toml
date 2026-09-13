@@ -79,12 +79,13 @@ uuid = { version = "1", features = ["v4"] }
 
 # Database
 log = "0.4"
-sea-orm = { version = "1", default-features = false, features = [
+sea-orm = { version = "2", default-features = false, features = [
     "runtime-tokio-rustls",
     "macros",
 ] }
-sqlx = { version = "0.8", default-features = false, features = [
-    "runtime-tokio-rustls",
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
     "migrate",
 ] }
 humantime-serde = "1"

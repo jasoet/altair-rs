@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     let backend = db.orm().get_database_backend();
     let row = db
         .orm()
-        .query_one(Statement::from_string(
+        .query_one_raw(Statement::from_string(
             backend,
             "SELECT COUNT(*) AS c FROM _sqlx_migrations".to_string(),
         ))
