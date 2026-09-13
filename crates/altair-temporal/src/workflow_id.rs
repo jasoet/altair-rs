@@ -1,9 +1,14 @@
 //! Encode a small structured payload into a workflow ID.
 //!
-//! Temporal's `ScheduleAction::StartWorkflow` cannot attach workflow input,
-//! so projects encode small payloads into the workflow ID itself. This
-//! module standardises the encoding using Crockford Base32 (via
-//! [`altair_base32`]) over the JSON bytes of the payload.
+//! The Temporal SDK's `ScheduleAction::start_workflow` accepts workflow
+//! input directly, so encoding a payload into the workflow ID is no longer
+//! required just to pass input to a scheduled workflow. This helper stays
+//! useful for packing a small identifier into a *run-scoped* workflow ID,
+//! and for the string-based [`ScheduleBuilder`](crate::ScheduleBuilder),
+//! which schedules by workflow-type name rather than a typed
+//! `WorkflowDefinition` and so does not use that typed constructor. It
+//! standardises the encoding using Crockford Base32 (via [`altair_base32`])
+//! over the JSON bytes of the payload.
 //!
 //! Format: `{prefix}-{base32}`.
 //!
