@@ -105,7 +105,11 @@ impl FunctionActivities {
                 ticker.tick().await;
                 loop {
                     ticker.tick().await;
-                    ctx.record_heartbeat(Vec::new());
+                    // SDK 1.0 made `record_heartbeat` an async, generic
+                    // method over the detail type. This is a liveness-only
+                    // heartbeat, so send unit details and ignore a transient
+                    // failure — the next tick retries.
+                    let _ = ctx.record_heartbeat(()).await;
                 }
             }
             // No heartbeat configured — sleep forever; the select will

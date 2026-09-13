@@ -72,13 +72,15 @@ impl HelloPipelineWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(GreetActivities::greet, step, opts)
+                    .execute_activity(GreetActivities::greet, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("GreetActivities::greet", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }

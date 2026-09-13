@@ -72,13 +72,15 @@ impl HelloExecuteWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(MathActivities::square, task, opts)
+                    .execute_activity(MathActivities::square, task, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("MathActivities::square", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }

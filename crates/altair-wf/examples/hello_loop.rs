@@ -87,13 +87,15 @@ impl HelloLoopWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(ProcessActivities::process, step, opts)
+                    .execute_activity(ProcessActivities::process, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("ProcessActivities::process", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }

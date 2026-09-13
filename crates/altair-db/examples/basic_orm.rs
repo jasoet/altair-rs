@@ -11,21 +11,21 @@ async fn main() -> anyhow::Result<()> {
 
     let backend = db.orm().get_database_backend();
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)".to_string(),
         ))
         .await?;
 
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "INSERT INTO users (name) VALUES ('alice'), ('bob')".to_string(),
         ))
         .await?;
     let row = db
         .orm()
-        .query_one(Statement::from_string(
+        .query_one_raw(Statement::from_string(
             backend,
             "SELECT COUNT(*) AS c FROM users".to_string(),
         ))

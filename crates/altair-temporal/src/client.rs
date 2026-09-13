@@ -108,10 +108,12 @@ async fn build_tls(cfg: &TlsConfig) -> Result<TlsOptions> {
             let key = tokio::fs::read(key_path).await.map_err(|e| {
                 Error::Configuration(format!("read client_key ({}): {e}", key_path.display()))
             })?;
-            Some(ClientTlsOptions {
-                client_cert: cert,
-                client_private_key: key,
-            })
+            Some(
+                ClientTlsOptions::builder()
+                    .client_cert(cert)
+                    .client_private_key(key)
+                    .build(),
+            )
         }
         _ => {
             return Err(Error::Configuration(
@@ -120,13 +122,14 @@ async fn build_tls(cfg: &TlsConfig) -> Result<TlsOptions> {
         }
     };
 
-    Ok(TlsOptions {
-        server_root_ca_cert: ca,
-        domain: cfg.server_name_override.clone(),
-        client_tls_options: client_tls,
-        // Custom rustls verifiers are deliberately not exposed through
-        // `Config` — the file-based CA/mTLS options above cover the
-        // supported deployment shapes.
-        server_cert_verifier: None,
-    })
+    // `TlsOptions`/`ClientTlsOptions` are `#[non_exhaustive]` bon builders in
+    // SDK 1.0, so they must be constructed through their builders rather than
+    // struct literals. Custom rustls verifiers are deliberately not exposed
+    // through `Config` — the file-based CA/mTLS options cover the supported
+    // deployment shapes — so `server_cert_verifier` is simply left unset.
+    Ok(TlsOptions::builder()
+        .maybe_server_root_ca_cert(ca)
+        .maybe_domain(cfg.server_name_override.clone())
+        .maybe_client_tls_options(client_tls)
+        .build())
 }

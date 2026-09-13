@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
     let backend = db.orm().get_database_backend();
 
     db.orm()
-        .execute(Statement::from_string(
+        .execute_raw(Statement::from_string(
             backend,
             "CREATE TABLE pings (n INTEGER)".to_string(),
         ))

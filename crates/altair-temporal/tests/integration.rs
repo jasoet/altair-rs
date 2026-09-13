@@ -118,7 +118,11 @@ async fn client_connect_to_unreachable_host_fails() {
 async fn worker_builds_against_container_and_drops_cleanly() {
     let temporal = temporal().await;
     let cfg = temporal.config(unique("worker-build-tq"));
+    // SDK 1.0 rejects a worker with no registrations ("At least one
+    // workflow or activity must be registered"), so register a dummy
+    // activity — these tests exercise worker lifecycle, not execution.
     let worker = WorkerBuilder::new(&cfg)
+        .register_activities(GreetingActivities)
         .build()
         .await
         .expect("build worker");
@@ -133,7 +137,11 @@ async fn worker_run_with_shutdown_future_exits_cleanly() {
     // here so we just need the SDK to acknowledge the shutdown signal
     // and return.
     cfg.shutdown_grace = Duration::from_secs(2);
+    // SDK 1.0 rejects a worker with no registrations ("At least one
+    // workflow or activity must be registered"), so register a dummy
+    // activity — these tests exercise worker lifecycle, not execution.
     let worker = WorkerBuilder::new(&cfg)
+        .register_activities(GreetingActivities)
         .build()
         .await
         .expect("build worker");
@@ -237,13 +245,12 @@ impl GreetWorkflow {
     #[run]
     pub async fn run(ctx: &mut WorkflowContext<Self>, name: String) -> WorkflowResult<String> {
         let greeting = ctx
-            .start_activity(
+            .execute_activity(
                 GreetingActivities::greet,
                 name,
                 ActivityOptions::start_to_close_timeout(Duration::from_secs(10)),
             )
-            .await
-            .map_err(|e| anyhow::anyhow!("activity failed: {e}"))?;
+            .await?;
         Ok(greeting)
     }
 }
@@ -290,9 +297,8 @@ impl FlakyWorkflow {
             .retry_policy(retry_policy)
             .build();
         let count = ctx
-            .start_activity(FlakyActivities::attempt, (), opts)
-            .await
-            .map_err(|e| anyhow::anyhow!("activity failed: {e}"))?;
+            .execute_activity(FlakyActivities::attempt, (), opts)
+            .await?;
         Ok(count)
     }
 }

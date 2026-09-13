@@ -44,7 +44,7 @@ impl FunctionPipelineWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(FunctionActivities::execute_function, step, opts)
+                    .execute_activity(FunctionActivities::execute_function, step, opts)
                     .await
                     .map_err(|e| {
                         altair_wf::Error::activity("FunctionActivities::execute_function", e)
@@ -52,7 +52,9 @@ impl FunctionPipelineWf {
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }

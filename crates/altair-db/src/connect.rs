@@ -63,8 +63,11 @@ mod tests {
     fn maps_timeouts() {
         let opts = build_options(&sample_config());
         assert_eq!(opts.get_acquire_timeout(), Some(Duration::from_secs(7)));
-        assert_eq!(opts.get_idle_timeout(), Some(Duration::from_mins(2)));
-        assert_eq!(opts.get_max_lifetime(), Some(Duration::from_mins(15)));
+        // sea-orm 2's `get_idle_timeout`/`get_max_lifetime` return
+        // `Option<Option<Duration>>`: the outer layer records whether the
+        // knob was set, the inner is the value itself.
+        assert_eq!(opts.get_idle_timeout(), Some(Some(Duration::from_mins(2))));
+        assert_eq!(opts.get_max_lifetime(), Some(Some(Duration::from_mins(15))));
     }
 
     #[test]
