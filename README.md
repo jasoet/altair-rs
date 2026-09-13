@@ -17,7 +17,7 @@ Production-ready Rust utility crates for tokio applications. Each crate wraps a 
 | [`altair-db`](crates/altair-db) | Sea-ORM + sqlx convenience layer (Postgres / MySQL / SQLite) | [![crate](https://img.shields.io/crates/v/altair-db.svg)](https://crates.io/crates/altair-db) |
 | [`altair-temporal`](crates/altair-temporal) | Stable facade over the temporalio-* 1.0 Rust SDK (typed Config, builders, OTel integration) | [![crate](https://img.shields.io/crates/v/altair-temporal.svg)](https://crates.io/crates/altair-temporal) |
 
-Pick one, several, or all four — each is usable standalone. Pair `altair-otel` with any of the others and tracing flows automatically (spans + metrics).
+Pick one, several, or all of them — each is usable standalone. Pair `altair-otel` with any of the others and tracing flows automatically (spans + metrics).
 
 ## Versioning
 

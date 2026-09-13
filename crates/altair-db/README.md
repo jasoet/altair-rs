@@ -19,13 +19,13 @@ Most Rust services want both:
 
 ```toml
 [dependencies]
-altair-db = "0.1"
+altair-db = "0.4"
 ```
 
 By default all three backends compile in. To shrink to just one:
 
 ```toml
-altair-db = { version = "0.1", default-features = false, features = ["postgres"] }
+altair-db = { version = "0.4", default-features = false, features = ["postgres"] }
 ```
 
 ## Quick start
