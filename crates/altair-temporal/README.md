@@ -2,13 +2,13 @@
 
 [![crates.io](https://img.shields.io/crates/v/altair-temporal.svg)](https://crates.io/crates/altair-temporal)
 
-Stable facade over the pre-1.0 `temporalio-*` Rust SDK: typed `Config`, `Client::from_config`, `WorkerBuilder`, `RetryPolicy` builder, `Schedule` builder, `classify_error` helper, `workflow_id::{encode,decode}`.
+Stable facade over the `temporalio-*` 1.0 Rust SDK: typed `Config`, `Client::from_config`, `WorkerBuilder`, `RetryPolicy` builder, `Schedule` builder, `classify_error` helper, `workflow_id::{encode,decode}`.
 
 Part of the [altair-rs](https://github.com/jasoet/altair-rs) workspace.
 
 ## Why
 
-The Temporal Rust SDK is pre-1.0. Each minor release is allowed to break public API. `altair-temporal`:
+The Temporal Rust SDK reached 1.0, but its `temporalio-sdk-core` dependency is still pre-1.0 (`0.9`) and the surface still evolves. `altair-temporal`:
 
 - **Owns** the setup surface — `Config`, `Client`, `Worker`, `RetryPolicy`, `Schedule`, error construction — and keeps it stable across SDK majors.
 - **Re-exports** the SDK's runtime types — `WorkflowContext`, `ActivityContext`, the `#[workflow]` / `#[activity]` macros — so consumers depend on `altair-temporal` alone.
@@ -20,7 +20,7 @@ Workflow and activity *bodies* may still need touch-ups across SDK majors — ma
 
 ```toml
 [dependencies]
-altair-temporal = "0.1"
+altair-temporal = "0.4"
 ```
 
 ## Quick start
@@ -75,7 +75,7 @@ Spin up a real Temporal dev server in your own integration tests via the
 
 ```toml
 [dev-dependencies]
-altair-temporal = { version = "0.1", features = ["testcontainers"] }
+altair-temporal = { version = "0.4", features = ["testcontainers"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 # Required by the SDK's #[workflow] / #[activities] proc-macros
 futures = "0.3"
@@ -125,7 +125,7 @@ through a real workflow execution.
 
 ## Versioning
 
-altair-temporal pins `temporalio-* = "~0.4"`. When the SDK ships breaking changes (e.g. 0.5.0), altair-temporal bumps to its next major. Consumers stay on the previous altair-temporal major until they choose to migrate. The crate's `Error` type uses boxed source variants specifically so the wrapper's public API doesn't churn when SDK error types do.
+altair-temporal pins `temporalio-* = "1"` (with `temporalio-sdk-core = "0.9"`, still pre-1.0). When the SDK ships breaking changes, altair-temporal bumps to its next major. Consumers stay on the previous altair-temporal major until they choose to migrate. The crate's `Error` type uses boxed source variants specifically so the wrapper's public API doesn't churn when SDK error types do.
 
 ## License
 

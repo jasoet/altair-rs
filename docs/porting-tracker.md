@@ -2,7 +2,7 @@
 
 Tracks the migration status of every package from [`github.com/jasoet/pkg`](https://github.com/jasoet/pkg) (Go) to its Rust equivalent in `altair-rs`.
 
-**Last updated:** 2026-06-01 (altair-wf datasync R1 fixes)
+**Last updated:** 2026-09-13 (temporalio SDK 1.0 + dependency upgrades; `deps:outdated` task)
 **Reference Go version:** `jasoet/pkg` v2.13.0 + `jasoet/go-wf` (workflow + function + datasync modules)
 
 ## Published crates
@@ -11,16 +11,16 @@ All crates live on crates.io:
 
 | Crate | Latest |
 |---|---|
-| [`altair-concurrent`](https://crates.io/crates/altair-concurrent) | 0.1.2 |
-| [`altair-retry`](https://crates.io/crates/altair-retry) | 0.1.2 |
-| [`altair-config`](https://crates.io/crates/altair-config) | 0.1.2 |
-| [`altair-otel`](https://crates.io/crates/altair-otel) | 0.1.2 |
-| [`altair-base32`](https://crates.io/crates/altair-base32) | 0.1.2 |
-| [`altair-compress`](https://crates.io/crates/altair-compress) | 0.1.2 |
-| [`altair-rest`](https://crates.io/crates/altair-rest) | 0.1.2 |
-| [`altair-server`](https://crates.io/crates/altair-server) | 0.1.2 (date TBD on publish) |
-| [`altair-db`](https://crates.io/crates/altair-db) | 0.1.x (TBD) |
-| [`altair-temporal`](https://crates.io/crates/altair-temporal) | 0.1.x (TBD) |
+| [`altair-concurrent`](https://crates.io/crates/altair-concurrent) | 0.4.0 |
+| [`altair-retry`](https://crates.io/crates/altair-retry) | 0.4.0 |
+| [`altair-config`](https://crates.io/crates/altair-config) | 0.4.0 |
+| [`altair-otel`](https://crates.io/crates/altair-otel) | 0.4.0 |
+| [`altair-base32`](https://crates.io/crates/altair-base32) | 0.4.0 |
+| [`altair-compress`](https://crates.io/crates/altair-compress) | 0.4.0 |
+| [`altair-rest`](https://crates.io/crates/altair-rest) | 0.4.0 |
+| [`altair-server`](https://crates.io/crates/altair-server) | 0.4.0 |
+| [`altair-db`](https://crates.io/crates/altair-db) | 0.4.0 |
+| [`altair-temporal`](https://crates.io/crates/altair-temporal) | 0.4.0 |
 
 **Release notes:**
 - **0.1.0** (2026-05-27) — initial release of starter scaffolding
@@ -32,6 +32,10 @@ All crates live on crates.io:
 - **`altair-server` 0.1.2** (date TBD on publish) — Axum + tower-http convenience layer with default middleware (tracing + request-id + timeout), built-in `/health` endpoint, and SIGINT/SIGTERM-aware graceful shutdown.
 - **`altair-db` 0.1.x** (date TBD on publish) — Sea-ORM + sqlx convenience layer. Postgres + MySQL + SQLite, smart pool defaults, sqlx-migrate, OTel-aware query tracing, closure-style transactions.
 - **`altair-temporal` 0.1.x** (date TBD on publish) — Stable facade over the temporalio-* 1.0 Rust SDK. Typed Config, Client/Worker builders, RetryPolicy + Schedule builders, classify_error, workflow_id encode/decode.
+- **v0.2.0–0.2.2** (2026-05-31) — hardening across `altair-rest`, `altair-server`, `altair-compress` (decompression-bomb caps), `altair-concurrent`; first `altair-wf` ship (Phase 1: workflow patterns ported from `go-wf`).
+- **v0.3.0** (2026-06-11) — `altair-wf` Phases 2 & 3 (`function` registry + `datasync` core/chunk); `altair-temporal` production-readiness fixes.
+- **v0.4.0** (2026-07-17) — workspace release; dependency upgrades in [#68](https://github.com/jasoet/altair-rs/pull/68) (temporal SDK 0.5, `toml` 1, `tower-http` 0.7, `testcontainers` 0.27).
+- **Post-0.4.0** (2026-09-13, [#72](https://github.com/jasoet/altair-rs/pull/72)) — dependency upgrades: **temporalio SDK 1.0**, `validator` 0.21, `sea-orm` 2, `sqlx` 0.9.
 
 Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
 `altair-grpc` (tonic), `altair-ssh` (russh), `altair-docker` (testcontainers/bollard).

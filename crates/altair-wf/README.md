@@ -20,8 +20,8 @@ The patterns are **SDK-agnostic** — each takes an `execute_one` closure that y
 
 ```toml
 [dependencies]
-altair-wf = "0.2"
-altair-temporal = "0.2"
+altair-wf = "0.4"
+altair-temporal = "0.4"
 # Required by the Temporal SDK's #[workflow] / #[activities] macros:
 futures = "0.3"
 futures-util = "0.3"
@@ -31,7 +31,7 @@ Opt-in features:
 
 ```toml
 [dependencies]
-altair-wf = { version = "0.2", features = ["function", "datasync"] }
+altair-wf = { version = "0.4", features = ["function", "datasync"] }
 ```
 
 ## Runnable examples

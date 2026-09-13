@@ -170,7 +170,7 @@ the `testcontainers` feature:
 
 ```toml
 [dev-dependencies]
-altair-otel = { version = "0.1", features = ["testcontainers"] }
+altair-otel = { version = "0.4", features = ["testcontainers"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
