@@ -90,6 +90,11 @@ tasks:
     cmds:
       - "{{.N}} cargo deny check"
 
+  deps:outdated:
+    desc: Show workspace dependencies with newer releases available
+    cmds:
+      - "{{.N}} cargo outdated --workspace --root-deps-only"
+
   clean:
     desc: Clean build artifacts
     cmds:

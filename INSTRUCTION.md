@@ -66,6 +66,7 @@ attribute commits to AI. This applies to ALL commits, including those made by to
 | `task check` | test + lint + fmt:check |
 | `task clean` | Remove build artifacts (`cargo clean`) |
 | `task nix:check` | Verify Nix environment and tool availability |
+| `task deps:outdated` | Show workspace deps with newer releases (`cargo-outdated`) |
 | `task release` | `release-plz release` (CI only) |
 
 ## Testing Strategy

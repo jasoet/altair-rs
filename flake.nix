@@ -24,6 +24,7 @@
             cargo-llvm-cov
             cargo-deny
             cargo-nextest
+            cargo-outdated
             cargo-release
             # release-plz: not installed in devshell — only used by CI via
             # MarcoIeni/release-plz-action; currently marked broken in nixpkgs.
