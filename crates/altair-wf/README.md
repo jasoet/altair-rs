@@ -22,9 +22,8 @@ The patterns are **SDK-agnostic** — each takes an `execute_one` closure that y
 [dependencies]
 altair-wf = "0.4"
 altair-temporal = "0.4"
-# Required by the Temporal SDK's #[workflow] / #[activities] macros:
+# Required by the Temporal SDK's #[activities] macro:
 futures = "0.3"
-futures-util = "0.3"
 ```
 
 Opt-in features:
@@ -222,8 +221,10 @@ impl DeployWorkflow {
     pub async fn run(ctx: &mut WorkflowContext<Self>, input: PipelineInput<DeployStep>) -> WorkflowResult<PipelineOutput<DeployResult>> {
         let opts = altair_wf::default_activity_options();
         let result = pipeline(input, |step| async {
-            // `ctx` isn't Send across all closures yet — see TODO in altair-temporal SDK
-            // notes. For now, dispatch via the activity reference directly:
+            // `WorkflowContext` is deliberately `!Send` — it holds Rc/RefCell
+            // state for deterministic replay, so it can't be moved into a Send
+            // closure. Capture it by reference and dispatch via the activity
+            // reference directly:
             ctx.start_activity(DeployActivities::run_step, step, opts.clone())
                 .await
                 .map_err(|e| altair_wf::Error::Activity {

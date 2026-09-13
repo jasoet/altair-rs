@@ -49,12 +49,10 @@ tempfile = { workspace = true }
 toml = { workspace = true }
 testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true }
-# Required by the SDK's #[workflow] / #[activities] proc-macros, which
-# expand to `::futures::...` (activities) and `::futures_util::...`
-# (workflows). Both crates must be in the dependency graph or the macros
-# fail to resolve their paths.
+# Required by the SDK's #[activities] proc-macro, which expands to
+# `::futures::future` / `::futures::FutureExt`; it must be a direct dep or
+# the macro fails to resolve those paths.
 futures = { workspace = true }
-futures-util = "0.3"
 serde = { workspace = true }
 # Sibling crates for examples only. Path-only — cargo publish strips
 # them; avoids cross-crate version cycles on major bumps.

@@ -77,9 +77,8 @@ Spin up a real Temporal dev server in your own integration tests via the
 [dev-dependencies]
 altair-temporal = { version = "0.4", features = ["testcontainers"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-# Required by the SDK's #[workflow] / #[activities] proc-macros
+# Required by the SDK's #[activities] proc-macro
 futures = "0.3"
-futures-util = "0.3"
 ```
 
 ```rust
