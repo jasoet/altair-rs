@@ -16,8 +16,10 @@
 
 use std::time::Duration;
 
+use temporalio_client::RpcOptions;
 use temporalio_client::schedules::{
-    CreateScheduleOptions, ScheduleAction, ScheduleIntervalSpec, ScheduleSpec,
+    CreateScheduleOptions, DeleteScheduleOptions, ScheduleAction, ScheduleIntervalSpec,
+    ScheduleSpec,
 };
 
 use crate::error::{Error, Result};
@@ -162,13 +164,16 @@ impl ScheduleBuilder {
         let note = schedule.note.clone();
         let handle = client.get_schedule_handle(id);
         handle
-            .update(move |u| {
-                u.set_spec(spec.clone());
-                u.set_paused(paused);
-                if let Some(n) = &note {
-                    u.set_note(n.clone());
-                }
-            })
+            .update(
+                move |u| {
+                    u.set_spec(spec.clone());
+                    u.set_paused(paused);
+                    if let Some(n) = &note {
+                        u.set_note(n.clone());
+                    }
+                },
+                RpcOptions::default(),
+            )
             .await
             .map_err(|e| Error::schedule(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))
     }
@@ -204,7 +209,7 @@ impl ScheduleBuilder {
 pub async fn delete(client: &temporalio_client::Client, id: &str) -> Result<()> {
     let handle = client.get_schedule_handle(id);
     handle
-        .delete()
+        .delete(DeleteScheduleOptions::default())
         .await
         .map_err(|e| Error::schedule(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))
 }
@@ -226,16 +231,18 @@ pub async fn delete_if_exists(client: &temporalio_client::Client, id: &str) -> R
 }
 
 fn to_spec(s: &Schedule) -> ScheduleSpec {
-    ScheduleSpec {
-        cron_strings: s.cron_strings.clone(),
-        intervals: s
-            .intervals
-            .iter()
-            .map(|d| ScheduleIntervalSpec::new(*d, None))
-            .collect(),
-        timezone_name: s.timezone.clone().unwrap_or_default(),
-        ..Default::default()
-    }
+    // `ScheduleSpec` is `#[non_exhaustive]` in SDK 1.0 and must be built
+    // through its bon builder; every field not set here keeps its default.
+    ScheduleSpec::builder()
+        .cron_strings(s.cron_strings.clone())
+        .intervals(
+            s.intervals
+                .iter()
+                .map(|d| ScheduleIntervalSpec::new(*d, None))
+                .collect::<Vec<_>>(),
+        )
+        .timezone_name(s.timezone.clone().unwrap_or_default())
+        .build()
 }
 
 fn to_create_options(s: &Schedule) -> CreateScheduleOptions {

@@ -1,6 +1,6 @@
 [package]
 name = "altair-temporal"
-description = "Stable facade over the pre-1.0 temporalio Rust SDK: typed Config, worker/client builders, retry + schedule builders, OTel-aware tracing"
+description = "Stable facade over the temporalio 1.0 Rust SDK: typed Config, worker/client builders, retry + schedule builders, OTel-aware tracing"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

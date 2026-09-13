@@ -31,7 +31,7 @@ All crates live on crates.io:
 - **`altair-rest` 0.1.2** (2026-05-28) — Resilient HTTP client built on `reqwest`. Built-in retries via `reqwest-retry` + tracing via `reqwest-tracing`. JSON helpers (`get_json`/`post_json`) for the 80% case.
 - **`altair-server` 0.1.2** (date TBD on publish) — Axum + tower-http convenience layer with default middleware (tracing + request-id + timeout), built-in `/health` endpoint, and SIGINT/SIGTERM-aware graceful shutdown.
 - **`altair-db` 0.1.x** (date TBD on publish) — Sea-ORM + sqlx convenience layer. Postgres + MySQL + SQLite, smart pool defaults, sqlx-migrate, OTel-aware query tracing, closure-style transactions.
-- **`altair-temporal` 0.1.x** (date TBD on publish) — Stable facade over pre-1.0 temporalio-* Rust SDK. Typed Config, Client/Worker builders, RetryPolicy + Schedule builders, classify_error, workflow_id encode/decode.
+- **`altair-temporal` 0.1.x** (date TBD on publish) — Stable facade over the temporalio-* 1.0 Rust SDK. Typed Config, Client/Worker builders, RetryPolicy + Schedule builders, classify_error, workflow_id encode/decode.
 
 Next milestone: depends on real-world need. Most likely candidates from `Awaiting Demand`:
 `altair-grpc` (tonic), `altair-ssh` (russh), `altair-docker` (testcontainers/bollard).
@@ -59,7 +59,7 @@ Next milestone: depends on real-world need. Most likely candidates from `Awaitin
 | `rest` | `altair-rest` | ✅ Done | `reqwest`, `reqwest-middleware`, `reqwest-retry`, `reqwest-tracing` | Resilient HTTP client with retry + tracing baked in |
 | `server` | `altair-server` | ✅ Done | `axum`, `tower`, `tower-http` | Convenience layer with default middleware + health endpoint + graceful shutdown |
 | `db` | `altair-db` | ✅ Done | `sea-orm`, `sqlx` | Sea-ORM CRUD + raw sqlx (pool, migrations, transactions); Postgres + MySQL + SQLite |
-| `temporal` | `altair-temporal` | ✅ Done | `temporalio-sdk`, `temporalio-client` | Stable facade over pre-1.0 SDK; Config + builders + workflow_id helper |
+| `temporal` | `altair-temporal` | ✅ Done | `temporalio-sdk`, `temporalio-client` | Stable facade over the 1.0 SDK; Config + builders + workflow_id helper |
 
 ## Awaiting Demand
 

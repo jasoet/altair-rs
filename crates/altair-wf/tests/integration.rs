@@ -174,13 +174,15 @@ impl PipelineWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(EchoActivities::echo, step, opts)
+                    .execute_activity(EchoActivities::echo, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -202,13 +204,15 @@ impl ParallelWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(EchoActivities::echo, step, opts)
+                    .execute_activity(EchoActivities::echo, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -230,13 +234,15 @@ impl DAGWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(EchoActivities::echo, step, opts)
+                    .execute_activity(EchoActivities::echo, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -255,13 +261,15 @@ impl ExecuteWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(EchoActivities::echo, step, opts)
+                    .execute_activity(EchoActivities::echo, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -290,13 +298,15 @@ impl LoopWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(EchoActivities::echo, step, opts)
+                    .execute_activity(EchoActivities::echo, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -328,13 +338,15 @@ impl ParameterizedLoopWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(EchoActivities::echo, step, opts)
+                    .execute_activity(EchoActivities::echo, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -711,7 +723,7 @@ impl FunctionPipelineWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(FunctionActivities::execute_function, step, opts)
+                    .execute_activity(FunctionActivities::execute_function, step, opts)
                     .await
                     .map_err(|e| {
                         altair_wf::Error::activity("FunctionActivities::execute_function", e)
@@ -719,7 +731,9 @@ impl FunctionPipelineWf {
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -906,7 +920,7 @@ impl FunctionParallelWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(FunctionActivities::execute_function, step, opts)
+                    .execute_activity(FunctionActivities::execute_function, step, opts)
                     .await
                     .map_err(|e| {
                         altair_wf::Error::activity("FunctionActivities::execute_function", e)
@@ -914,7 +928,9 @@ impl FunctionParallelWf {
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -1139,7 +1155,7 @@ impl DatasyncWf {
             let list_opts = list_opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(DatasyncActivities::list_partitions, (), list_opts)
+                    .execute_activity(DatasyncActivities::list_partitions, (), list_opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("list_partitions", e))
             }
@@ -1150,7 +1166,7 @@ impl DatasyncWf {
             let run_opts = run_opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(DatasyncActivities::run_partition, p, run_opts)
+                    .execute_activity(DatasyncActivities::run_partition, p, run_opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("run_partition", e))
             }
@@ -1168,7 +1184,7 @@ impl DatasyncWf {
                         let job_name = job_name.clone();
                         async move {
                             ctx_ref
-                                .start_activity(
+                                .execute_activity(
                                     DatasyncActivities::read_cursor,
                                     job_name,
                                     read_opts,
@@ -1182,7 +1198,7 @@ impl DatasyncWf {
                     let adv_opts = adv_opts.clone();
                     async move {
                         ctx_ref
-                            .start_activity(DatasyncActivities::advance_cursor, end, adv_opts)
+                            .execute_activity(DatasyncActivities::advance_cursor, end, adv_opts)
                             .await
                             .map_err(|e| altair_wf::Error::activity("advance_cursor", e))
                     }
@@ -1197,7 +1213,10 @@ impl DatasyncWf {
 
         let result = chunked_sync_run(cfg, list, run, cursor, |_d| async {})
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
 
         if result.deferred && input.chain_continue_as_new {
             // Hand the rest off to a fresh execution with the same
@@ -1205,7 +1224,7 @@ impl DatasyncWf {
             // for the partitions processed this run) lets the next
             // execution skip them.
             use altair_temporal::temporalio_sdk::ContinueAsNewOptions;
-            ctx_ref.continue_as_new(&input, ContinueAsNewOptions::default())?;
+            ctx_ref.continue_as_new(input, ContinueAsNewOptions::default())?;
             unreachable!("continue_as_new always returns Err");
         }
         Ok(result)

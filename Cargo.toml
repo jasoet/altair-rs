@@ -93,15 +93,17 @@ testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["postgres", "mysql"] }
 
 # Temporal
-temporalio-sdk = "~0.5"
-temporalio-sdk-core = "~0.5"
-temporalio-client = "~0.5"
-temporalio-common = "~0.5"
-temporalio-macros = "~0.5"
+temporalio-sdk = "1"
+# temporalio-sdk 1.0 pins sdk-core at exactly =0.9.0 (Core has not yet
+# reached 1.0); keep it in its own 0.9 range so resolution stays valid.
+temporalio-sdk-core = "0.9"
+temporalio-client = "1"
+temporalio-common = "1"
+temporalio-macros = "1"
 # Required as a direct dependency by every crate that invokes the
 # `#[workflow]` / `#[workflow_methods]` macros: their expansions
-# reference `::temporalio_workflow` paths (new in SDK 0.5).
-temporalio-workflow = "~0.5"
+# reference `::temporalio_workflow` paths.
+temporalio-workflow = "1"
 prost-wkt-types = "0.7"
 
 # Retry

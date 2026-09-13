@@ -147,7 +147,7 @@ macro_rules! dispatch_echo {
         |step: EchoIn| {
             let opts = $opts.clone();
             async move {
-                $ctx.start_activity(EchoActivities::echo, step, opts)
+                $ctx.execute_activity(EchoActivities::echo, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("EchoActivities::echo", e))
             }
@@ -171,7 +171,10 @@ impl ScheduledExecuteOkWf {
         let ctx_ref: &WorkflowContext<Self> = ctx;
         let out = execute(ok(1, "single-success"), dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(out)
     }
 }
@@ -191,7 +194,10 @@ impl ScheduledExecuteFailWf {
         // what to do with the business-level failure.
         let out = execute(bad(2, "single-failure"), dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(out)
     }
 }
@@ -220,7 +226,10 @@ impl ScheduledPipelineAllOkWf {
         };
         let result = pipeline(input, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -248,7 +257,10 @@ impl ScheduledPipelineContinueWf {
         };
         let result = pipeline(input, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -276,7 +288,10 @@ impl ScheduledPipelineStopWf {
         };
         let result = pipeline(input, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -310,7 +325,10 @@ impl ScheduledParallelContinueWf {
         };
         let result = parallel(input, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -336,7 +354,10 @@ impl ScheduledParallelFailFastWf {
         // FailFast surfaces the first failure as a workflow failure.
         let result = parallel(input, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -381,7 +402,10 @@ impl ScheduledLoopSequentialWf {
         };
         let result = run_loop(input, substitutor(), dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -408,7 +432,10 @@ impl ScheduledLoopParallelWf {
         };
         let result = run_loop(input, substitutor(), dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -459,7 +486,10 @@ impl ScheduledParameterizedLoopWf {
         );
         let result = parameterized_loop(input, sub, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -509,7 +539,10 @@ impl ScheduledDagDiamondWf {
         };
         let result = run_dag(input, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -556,7 +589,10 @@ impl ScheduledDagLinearWf {
         };
         let result = run_dag(input, dispatch_echo!(ctx_ref, opts))
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
         Ok(result)
     }
 }
@@ -591,13 +627,15 @@ impl ScheduledFunctionSuccessWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(FunctionActivities::execute_function, step, opts)
+                    .execute_activity(FunctionActivities::execute_function, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("FunctionActivities", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -632,13 +670,15 @@ impl ScheduledFunctionMixedWf {
             let opts = opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(FunctionActivities::execute_function, step, opts)
+                    .execute_activity(FunctionActivities::execute_function, step, opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("FunctionActivities", e))
             }
         })
         .await
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        .map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }
@@ -781,7 +821,7 @@ macro_rules! chunked_run {
             let list_opts = list_opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(DemoActivities::list_partitions, (), list_opts)
+                    .execute_activity(DemoActivities::list_partitions, (), list_opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("list_partitions", e))
             }
@@ -791,7 +831,7 @@ macro_rules! chunked_run {
             let run_opts = run_opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(DemoActivities::run_partition, p, run_opts)
+                    .execute_activity(DemoActivities::run_partition, p, run_opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("run_partition", e))
             }
@@ -806,7 +846,7 @@ macro_rules! chunked_run {
                 let job_for_read = job_for_read.clone();
                 async move {
                     ctx_ref
-                        .start_activity(DemoActivities::read_cursor, job_for_read, read_opts)
+                        .execute_activity(DemoActivities::read_cursor, job_for_read, read_opts)
                         .await
                         .map_err(|e| altair_wf::Error::activity("read_cursor", e))
                 }
@@ -816,7 +856,7 @@ macro_rules! chunked_run {
                 let job = job_for_advance.clone();
                 async move {
                     ctx_ref
-                        .start_activity(
+                        .execute_activity(
                             DemoActivities::advance_cursor,
                             AdvanceInput { job, end },
                             adv_opts,
@@ -849,24 +889,26 @@ impl ScheduledChunkedCanWf {
         // Top-level start (the schedule fired) — wipe the cursor so we
         // process every partition again. A continued execution inside
         // the CAN chain skips this so it can read the prior cursor.
-        if ctx_ref
-            .workflow_initial_info()
-            .continued_from_execution_run_id
-            .is_empty()
-        {
+        if ctx_ref.info().continued_from_run_id().is_none() {
             ctx_ref
-                .start_activity(
+                .execute_activity(
                     DemoActivities::reset_cursor,
                     "scheduled-can".to_string(),
                     opts.clone(),
                 )
                 .await
-                .map_err(|e| anyhow::anyhow!("reset_cursor: {e}"))?;
+                .map_err(|e| {
+                    temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!(
+                        "reset_cursor: {e}"
+                    ))
+                    .build()
+                })?;
         }
-        let result =
-            chunked_run!(ctx_ref, opts, "scheduled-can", 2).map_err(|e| anyhow::anyhow!("{e}"))?;
+        let result = chunked_run!(ctx_ref, opts, "scheduled-can", 2).map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         if result.deferred {
-            ctx_ref.continue_as_new(&(), ContinueAsNewOptions::default())?;
+            ctx_ref.continue_as_new((), ContinueAsNewOptions::default())?;
             unreachable!();
         }
         Ok(result)
@@ -890,16 +932,22 @@ impl ScheduledChunkedSinglePassWf {
         let ctx_ref: &WorkflowContext<Self> = ctx;
         // This variant never continues-as-new; every fire starts fresh.
         ctx_ref
-            .start_activity(
+            .execute_activity(
                 DemoActivities::reset_cursor,
                 "scheduled-single".to_string(),
                 opts.clone(),
             )
             .await
-            .map_err(|e| anyhow::anyhow!("reset_cursor: {e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!(
+                    "reset_cursor: {e}"
+                ))
+                .build()
+            })?;
         // max_per_exec = 0 disables truncation; entire list runs once.
-        let result = chunked_run!(ctx_ref, opts, "scheduled-single", 0)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let result = chunked_run!(ctx_ref, opts, "scheduled-single", 0).map_err(|e| {
+            temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}")).build()
+        })?;
         Ok(result)
     }
 }

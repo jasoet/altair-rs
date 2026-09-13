@@ -125,7 +125,7 @@ impl DemoChunkedWf {
             let list_opts = list_opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(DemoActivities::list_partitions, (), list_opts)
+                    .execute_activity(DemoActivities::list_partitions, (), list_opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("list_partitions", e))
             }
@@ -136,7 +136,7 @@ impl DemoChunkedWf {
             let run_opts = run_opts.clone();
             async move {
                 ctx_ref
-                    .start_activity(DemoActivities::run_partition, p, run_opts)
+                    .execute_activity(DemoActivities::run_partition, p, run_opts)
                     .await
                     .map_err(|e| altair_wf::Error::activity("run_partition", e))
             }
@@ -153,7 +153,7 @@ impl DemoChunkedWf {
                     let job_name = job_name.clone();
                     async move {
                         ctx_ref
-                            .start_activity(DemoActivities::read_cursor, job_name, read_opts)
+                            .execute_activity(DemoActivities::read_cursor, job_name, read_opts)
                             .await
                             .map_err(|e| altair_wf::Error::activity("read_cursor", e))
                     }
@@ -163,7 +163,7 @@ impl DemoChunkedWf {
                 let adv_opts = adv_opts.clone();
                 async move {
                     ctx_ref
-                        .start_activity(DemoActivities::advance_cursor, end, adv_opts)
+                        .execute_activity(DemoActivities::advance_cursor, end, adv_opts)
                         .await
                         .map_err(|e| altair_wf::Error::activity("advance_cursor", e))
                 }
@@ -174,14 +174,17 @@ impl DemoChunkedWf {
             ChunkedSyncConfig::new(&input.job).max_partitions_per_execution(input.max_per_exec);
         let result = chunked_sync_run(cfg, list, run, cursor, |_d| async {})
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .map_err(|e| {
+                temporalio_common::error::ApplicationFailure::builder(anyhow::anyhow!("{e}"))
+                    .build()
+            })?;
 
         // The load-bearing part: when the helper truncated and set
         // `deferred = true`, hand the rest off to a fresh execution
         // with the same input. The cursor advanced during this run
         // lets the next execution skip the prefix.
         if result.deferred {
-            ctx_ref.continue_as_new(&input, ContinueAsNewOptions::default())?;
+            ctx_ref.continue_as_new(input, ContinueAsNewOptions::default())?;
             unreachable!("continue_as_new always returns Err");
         }
         Ok(result)

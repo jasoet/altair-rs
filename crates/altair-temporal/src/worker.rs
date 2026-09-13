@@ -7,9 +7,9 @@
 // SDK's own cleanup, so the change is observationally neutral here.
 #![allow(tail_expr_drop_order, clippy::single_match_else)]
 
-use std::sync::Arc;
-
-use temporalio_sdk_core::{CoreRuntime, FixedSizeSlotSupplier, RuntimeOptions, TunerBuilder};
+use temporalio_sdk::Runtime;
+use temporalio_sdk::runtime::RuntimeOptions;
+use temporalio_sdk::runtime::worker_tuner::{FixedSizeSlotSupplier, TunerHolder};
 
 use crate::client::Client;
 use crate::config::Config;
@@ -110,7 +110,7 @@ impl WorkerBuilder {
         self
     }
 
-    /// Build the worker: connect to Temporal, create the [`CoreRuntime`], and
+    /// Build the worker: connect to Temporal, create the SDK [`Runtime`], and
     /// apply all queued workflow/activity registrations.
     ///
     /// # Errors
@@ -128,22 +128,26 @@ impl WorkerBuilder {
     pub async fn build(self) -> Result<Worker> {
         let client = Client::from_config(&self.config).await?;
 
-        let runtime = CoreRuntime::new_assume_tokio(RuntimeOptions::default())
+        let runtime = Runtime::from_current_tokio(RuntimeOptions::default())
             .map_err(|e| Error::worker(format!("runtime init: {e:#}")))?;
 
-        // Build a Tuner with FixedSizeSlotSupplier for both workflow
-        // and activity slots — these are the actual concurrency caps.
-        // The SDK's per-second rate limit (`max_worker_activities_per_second`)
-        // is intentionally NOT used: setting it silently throttles
-        // workers to N exec/sec regardless of available parallelism.
+        // Build a tuner with a FixedSizeSlotSupplier per slot type — these
+        // are the actual concurrency caps. The SDK's per-second rate limit
+        // (`max_worker_activities_per_second`) is intentionally NOT used:
+        // setting it silently throttles workers to N exec/sec regardless of
+        // available parallelism. SDK 1.0 requires a supplier for every slot
+        // type: local activities track the activity cap, and Nexus is unused
+        // here but still needs a supplier.
         let workflow_slots =
             usize::try_from(self.config.max_concurrent_workflows).unwrap_or(usize::MAX);
         let activity_slots =
             usize::try_from(self.config.max_concurrent_activities).unwrap_or(usize::MAX);
-        let mut tuner_builder = TunerBuilder::default();
-        tuner_builder.workflow_slot_supplier(Arc::new(FixedSizeSlotSupplier::new(workflow_slots)));
-        tuner_builder.activity_slot_supplier(Arc::new(FixedSizeSlotSupplier::new(activity_slots)));
-        let tuner = Arc::new(tuner_builder.build());
+        let tuner = TunerHolder::builder()
+            .workflow_task_slot_supplier(FixedSizeSlotSupplier::new(workflow_slots))
+            .activity_task_slot_supplier(FixedSizeSlotSupplier::new(activity_slots))
+            .local_activity_task_slot_supplier(FixedSizeSlotSupplier::new(activity_slots))
+            .nexus_task_slot_supplier(FixedSizeSlotSupplier::new(activity_slots))
+            .build();
 
         // Only set identity when the operator opted in — otherwise the
         // SDK picks `<pid>@<hostname>`, which is what we want in prod
@@ -176,8 +180,8 @@ impl WorkerBuilder {
 /// A built Temporal worker ready to poll task queues.
 pub struct Worker {
     inner: temporalio_sdk::Worker,
-    /// Keeps the `CoreRuntime` alive for the worker's lifetime.
-    _runtime: CoreRuntime,
+    /// Keeps the `Runtime` alive for the worker's lifetime.
+    _runtime: Runtime,
     /// Outer cap on how long the drain may take after shutdown is
     /// initiated — set to `shutdown_grace + 30s` so we don't hang
     /// indefinitely if the SDK's run loop doesn't acknowledge
