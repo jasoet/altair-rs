@@ -50,7 +50,7 @@ use altair_temporal::temporalio_sdk::{
 };
 use altair_temporal::testcontainer::TemporalContainer;
 use altair_temporal::{
-    Client, Config, RetryPolicy, Schedule, Worker, WorkerBuilder, delete_schedule,
+    Client, Config, RetryPolicy, Schedule, TypedSchedule, Worker, WorkerBuilder, delete_schedule,
 };
 // `futures` must be in the dep graph: the SDK's #[workflow] /
 // #[activities] macros expand to `.boxed()` calls on async blocks via
@@ -215,6 +215,53 @@ async fn schedule_update_changes_spec() {
         .expect("update schedule");
 
     let _ = delete_schedule(&client, &sched_id).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn schedule_create_with_string_input() {
+    let temporal = temporal().await;
+    let cfg = temporal.config(unique("sched-in-tq"));
+    let client = Client::from_config(&cfg).await.expect("client");
+    let sched_id = unique("sched-in-id");
+
+    // String-named schedule carrying native input — the server must accept
+    // the input-bearing StartWorkflow action.
+    Schedule::builder()
+        .cron("0 0 * * *")
+        .start_workflow("EchoWorkflow", &cfg.task_queue, unique("sched-in-wid"))
+        .input(&"scheduled-payload".to_string())
+        .expect("encode input")
+        .paused(true)
+        .create(&client, &sched_id)
+        .await
+        .expect("create schedule with input");
+
+    delete_schedule(&client, &sched_id)
+        .await
+        .expect("delete schedule");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn typed_schedule_create_with_input() {
+    let temporal = temporal().await;
+    let cfg = temporal.config(unique("sched-typed-tq"));
+    let client = Client::from_config(&cfg).await.expect("client");
+    let sched_id = unique("sched-typed-id");
+
+    // Typed schedule: input type checked against EchoWorkflow::Input (String).
+    TypedSchedule::<EchoWorkflow>::builder()
+        .cron("0 0 * * *")
+        .input("typed-payload".to_string())
+        .task_queue(&cfg.task_queue)
+        .workflow_id(unique("sched-typed-wid"))
+        .paused(true)
+        .create(&client, &sched_id)
+        .await
+        .expect("create typed schedule with input");
+
+    delete_schedule(&client, &sched_id)
+        .await
+        .expect("delete schedule");
 }
 
 // ---------------------------------------------------------------------------

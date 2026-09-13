@@ -11,8 +11,9 @@
 //! explicitly when needed: `use altair_temporal::Result as TemporalResult;`.
 
 pub use crate::{
-    Client, Config, RetryPolicy, RetryPolicyBuilder, Schedule, ScheduleBuilder, TlsConfig, Worker,
-    WorkerBuilder, classify_error, delete_schedule, delete_schedule_if_exists,
+    Client, Config, RetryPolicy, RetryPolicyBuilder, Schedule, ScheduleBuilder, TlsConfig,
+    TypedSchedule, TypedScheduleBuilder, Worker, WorkerBuilder, classify_error, delete_schedule,
+    delete_schedule_if_exists,
 };
 
 // SDK macros most consumers reach for when defining workflows / activities.
