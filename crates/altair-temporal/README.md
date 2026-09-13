@@ -51,9 +51,39 @@ async fn main() -> anyhow::Result<()> {
 - **`Client::from_config`** — async factory returning the SDK client ready for `start_workflow`, schedule ops, etc.
 - **`WorkerBuilder`** — fluent builder over `temporalio-sdk-core` worker setup; `run()` polls until SIGINT/SIGTERM; `run_with_shutdown(future)` for custom drivers.
 - **`RetryPolicy::builder()`** — replaces hand-built `prost_wkt_types::Duration` proto with a `.max_attempts(5).backoff_coefficient(2.0).non_retryable("X").build()` chain.
-- **`Schedule::builder()`** — `cron`/`interval`/`note`/`paused`/`start_workflow` then terminal `create`/`update`/`delete_schedule(client, id)`.
+- **`Schedule::builder()`** — schedule by workflow-type name: `cron`/`interval`/`timezone`/`note`/`paused`/`start_workflow`, optional `input(&value)` (serde → `json/plain` payload), then terminal `create`/`update`/`create_or_update`/`delete_schedule(client, id)`.
+- **`TypedSchedule::<W>::builder()`** — schedule a Rust `#[workflow]` type with compile-time-checked `input(W::Input)`, serialized by the client's `DataConverter`.
 - **`classify_error()`** — `ActivityError` construction with `non_retryable` decided by a predicate.
 - **`workflow_id::encode` / `decode`** — pack a small structured payload into a workflow ID. (Originally a workaround for scheduled workflows not carrying input; SDK 0.5's `ScheduleAction::start_workflow` now accepts input directly, but the helper remains useful for run-scoped IDs.)
+
+## Scheduling with input
+
+Both builders can attach input to each scheduled run:
+
+```rust,no_run
+use altair_temporal::{Schedule, TypedSchedule};
+
+// By workflow-type name — serde value encoded as a json/plain payload:
+Schedule::builder()
+    .cron("0 9 * * *")
+    .start_workflow("MyWorkflow", "task-queue", "wid")
+    .input(&"payload".to_string())?
+    .create(&client, "sched-by-name")
+    .await?;
+
+// Typed — input checked against the workflow's declared input type,
+// serialized by the client's DataConverter:
+TypedSchedule::<MyWorkflow>::builder()
+    .cron("0 9 * * *")
+    .input("payload".to_string())
+    .task_queue("task-queue")
+    .workflow_id("wid")
+    .create(&client, "sched-typed")
+    .await?;
+```
+
+`update` / `create_or_update` change the schedule's spec, paused flag, and
+note; the workflow input is set at create time.
 
 ## Examples
 
